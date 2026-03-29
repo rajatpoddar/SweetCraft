@@ -1,0 +1,7 @@
+
+
+
+ek reports section banao , jisme mujhe ye dikhna chahiye total transactions , matlab month me kitna orders se kamayi hua , kitna staffs me paisa gaya , aur kitna debt hai customer udhari . 
+
+staff management me , attendace bnanae ke baad mark ho jata tha aur edit ka option tha wo q hata diye. 
+aur inventroy / stock management ko bhi thoda improve karo , isme stock entry karne ka to option hai but jab stock out kaise kare ? 

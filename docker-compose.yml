@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./mithai-app
+    ports:
+      - "5534:5000"
+    volumes:
+      - ./mithai-app/instance:/app/instance # SQLite data safe rakhne ke liye
+    restart: always
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8834:80" # NAS par port 8080 par access hoga
+    depends_on:
+      - backend
+    restart: always

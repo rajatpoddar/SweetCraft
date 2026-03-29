@@ -1,0 +1,23 @@
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Python
+mithai-app/venv/
+mithai-app/__pycache__/
+mithai-app/instance/
+
+# OS
+.DS_Store
+
+# Python Virtual Environment
+venv/
+env/
+
+# Uploaded Images
+static/uploads/
+
+# Databases & Caches
+*.db
+__pycache__/
+instance/

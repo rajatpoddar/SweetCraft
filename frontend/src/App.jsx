@@ -9,7 +9,7 @@ import {
 
 import MenuCard from './MenuCard';
 
-const API_BASE_URL = `http://${window.location.hostname}:5000`;
+const API_BASE_URL = `http://${window.location.hostname}:5534`;
 
 
 // --- MAIN APP WRAPPER WITH THEME & AUTH ---

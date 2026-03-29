@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+.pytest_cache/
+
+# Databases & Uploads (Ye volume me rahenge, image me copy nahi hone chahiye)
+instance/
+*.db
+shop.db
+static/uploads/
+
+# Frontend & Git
+frontend/
+.git/
+.gitignore
+
+# Docker & OS
+Dockerfile
+docker-compose.yml
+.DS_Store
+.env

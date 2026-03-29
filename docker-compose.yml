@@ -2,11 +2,11 @@ version: '3.8'
 
 services:
   backend:
-    build: ./mithai-app
+    build: .
     ports:
       - "5534:5000"
     volumes:
-      - ./mithai-app/instance:/app/instance # SQLite data safe rakhne ke liye
+      - ./instance:/app/instance # SQLite data safe rakhne ke liye
     restart: always
 
   frontend:

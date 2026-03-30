@@ -354,6 +354,7 @@ function MetricCard({ title, value, sub, icon, gradient }) {
 function InventoryPage() {
   const [inventory, setInventory] = useState([]);
   const [formData, setFormData] = useState({ item_name: '', quantity: '', expiry_date: '', min_stock: '5' });
+  const [searchQuery, setSearchQuery] = useState(''); // Naya Search State
 
   const fetchInventory = () => fetch(`${API_BASE_URL}/api/inventory`).then(res => res.json()).then(setInventory).catch(() => setInventory([]));
   useEffect(() => { fetchInventory(); }, []);
@@ -396,7 +397,6 @@ function InventoryPage() {
     }
   };
 
-  // Naya Function: Item ko hamesha ke liye hatane ke liye
   const handleDeleteItem = async (itemName) => {
     if (!window.confirm(`Kya aap sach mein '${itemName}' ko hamesha ke liye list se hatana chahte hain? Isse iska dashboard alert bhi band ho jayega.`)) return;
     try {
@@ -415,12 +415,16 @@ function InventoryPage() {
     if (item.quantity > 0) {
       acc[item.item_name].batches.push(item);
     }
-    
     return acc;
   }, {});
 
   const groupedItemsList = Object.values(groupedInventory);
   const uniqueItemNames = Object.keys(groupedInventory);
+
+  // Search Filter
+  const filteredItemsList = groupedItemsList.filter(group => 
+    group.item_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -430,7 +434,6 @@ function InventoryPage() {
         <h2 className="text-xl font-extrabold mb-6 dark:text-white">Add New Stock</h2>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-6 items-end">
           <div className="md:col-span-2">
-            {/* Yahan list="item-names" add kiya gaya hai auto-suggestion ke liye */}
             <UI_Input 
               label="Item Name" 
               placeholder="e.g. Haldiram Bhujia" 
@@ -450,13 +453,20 @@ function InventoryPage() {
         </form>
       </div>
 
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mt-8 mb-4 gap-4">
+          <h2 className="text-2xl font-black text-zinc-900 dark:text-white">Current Stock</h2>
+          <div className="relative w-full md:w-72">
+             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none"><Search className="text-zinc-400" size={16} /></div>
+             <input type="text" placeholder="Search stock item..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all dark:text-white" />
+          </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {groupedItemsList.map(group => (
+        {filteredItemsList.map(group => (
           <div key={group.item_name} className="bg-white dark:bg-zinc-900 p-6 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
             <div className="mb-4">
               <div className="flex justify-between items-start mb-3">
                 <h3 className="text-2xl font-bold dark:text-white">{group.item_name}</h3>
-                {/* Remove Item Button */}
                 <button onClick={() => handleDeleteItem(group.item_name)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full hover:scale-110 transition-transform" title="Remove Item Completely">
                   <Trash2 size={16} />
                 </button>
@@ -471,7 +481,6 @@ function InventoryPage() {
             <div className="space-y-3">
               <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mt-2 border-b border-zinc-100 dark:border-zinc-800 pb-1">Expiry Batches</p>
               
-              {/* NAYA: Agar active batches hain toh render karo, warna message dikhao */}
               {group.batches.length > 0 ? (
                 group.batches.sort((a,b) => new Date(a.expiry_date) - new Date(b.expiry_date)).map(batch => (
                   <div key={batch.id} className="bg-zinc-50 dark:bg-zinc-950/50 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 flex flex-col gap-2">
@@ -491,7 +500,7 @@ function InventoryPage() {
             </div>
           </div>
         ))}
-        {groupedItemsList.length === 0 && <p className="text-zinc-500">Inventory khali hai.</p>}
+        {filteredItemsList.length === 0 && <p className="text-zinc-500 col-span-full">Koi stock nahi mila.</p>}
       </div>
     </div>
   );
@@ -503,9 +512,8 @@ function StaffPage() {
   const [todayPay, setTodayPay] = useState(0);
   const [formData, setFormData] = useState({ name: '', mobile: '', address: '', payment_type: 'Daily', base_salary: '' });
   const [historyModal, setHistoryModal] = useState({ isOpen: false, staff: null, logs: [] });
-  
-  // Naya state modal ke liye
   const [payModal, setPayModal] = useState({ isOpen: false, staffId: null, action: '', amount: '', note: '' });
+  const [searchQuery, setSearchQuery] = useState(''); // Naya Search State
 
   const fetchStaff = () => { 
     const todayDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().split('T')[0];
@@ -546,6 +554,12 @@ function StaffPage() {
       .catch(() => {});
   };
 
+  // Search Filter
+  const filteredStaff = staffList.filter(staff => 
+    staff.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (staff.mobile && staff.mobile.includes(searchQuery))
+  );
+
   return (
     <div className="animate-fade-in space-y-6">
       <div className="pt-2"><h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Staff Khata</h1></div>
@@ -570,8 +584,16 @@ function StaffPage() {
         </form>
       </div>
 
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mt-8 mb-4 gap-4">
+          <h2 className="text-2xl font-black text-zinc-900 dark:text-white">All Staff</h2>
+          <div className="relative w-full md:w-72">
+             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none"><Search className="text-zinc-400" size={16} /></div>
+             <input type="text" placeholder="Search staff name or mobile..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all dark:text-white" />
+          </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {staffList.map(staff => (
+        {filteredStaff.map(staff => (
           <div key={staff.id} className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2rem] p-6 flex flex-col justify-between shadow-sm">
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -614,6 +636,7 @@ function StaffPage() {
             </div>
           </div>
         ))}
+        {filteredStaff.length === 0 && <p className="text-zinc-500 col-span-full">Koi staff nahi mila.</p>}
       </div>
 
       {payModal.isOpen && (
@@ -668,10 +691,12 @@ function OrdersPage() {
   const [selectedItems, setSelectedItems] = useState([]);
   const [currentItem, setCurrentItem] = useState('');
   const [currentQty, setCurrentQty] = useState('');
+  const [currentPrice, setCurrentPrice] = useState('');
   const [calculatedTotal, setCalculatedTotal] = useState(0);
   
   const [formData, setFormData] = useState({ customer_name: '', phone: '', address: '', delivery_date: '', total_amount: '', advance_paid: '' });
   const [deliveryModal, setDeliveryModal] = useState({ isOpen: false, order: null, paidNow: '' });
+  const [searchQuery, setSearchQuery] = useState(''); 
   const navigate = useNavigate();
 
   const fetchOrders = () => { fetch(API_BASE_URL + '/api/orders').then(res => res.json()).then(setOrders).catch(() => { }); };
@@ -680,18 +705,26 @@ function OrdersPage() {
     fetch(API_BASE_URL + '/api/menu').then(res => res.json()).then(setMenuItems).catch(()=>{});
   }, []);
 
+  const handleItemSelect = (val) => {
+    setCurrentItem(val);
+    const found = menuItems.find(m => m.name === val);
+    if (found) setCurrentPrice(found.price);
+    else setCurrentPrice('');
+  };
+
   const addItemToOrder = () => {
-    if(currentItem && currentQty) {
+    if(currentItem && currentQty && currentPrice) {
         const itemDetails = menuItems.find(m => m.name === currentItem);
-        const unit = itemDetails ? itemDetails.unit : 'pc';
-        const price = itemDetails ? itemDetails.price : 0;
-        const addAmount = price * Number(currentQty);
+        const unit = itemDetails ? itemDetails.unit : 'pc/kg';
+        const addAmount = Number(currentPrice) * Number(currentQty);
         
         setSelectedItems([...selectedItems, `${currentItem} (${currentQty} ${unit}) - ₹${addAmount}`]);
         const newTotal = calculatedTotal + addAmount;
         setCalculatedTotal(newTotal);
-        setFormData({...formData, total_amount: newTotal}); // auto-fill user box
-        setCurrentItem(''); setCurrentQty('');
+        setFormData({...formData, total_amount: newTotal}); 
+        setCurrentItem(''); setCurrentQty(''); setCurrentPrice('');
+    } else {
+        alert("Kripya Item Name, Qty, aur Price teeno dalein.");
     }
   };
 
@@ -699,7 +732,6 @@ function OrdersPage() {
     e.preventDefault();
     if(selectedItems.length === 0) return alert("Please add at least one item to the order.");
     
-    // Calculate final discount before saving
     let finalDiscount = 0;
     if(calculatedTotal > Number(formData.total_amount)) {
         finalDiscount = calculatedTotal - Number(formData.total_amount);
@@ -720,6 +752,17 @@ function OrdersPage() {
     fetch(`${API_BASE_URL}/api/orders/${id}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) }).then(fetchOrders);
   };
 
+  // NAYA: Order Cancel/Delete karne ka function
+  const handleDeleteOrder = async (id, customerName) => {
+    if (!window.confirm(`Kya aap sach me '${customerName}' ka order cancel/delete karna chahte hain?`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/orders/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchOrders();
+    } catch (error) {
+      alert("Order delete fail ho gaya. Network check karein.");
+    }
+  };
+
   const confirmDelivery = (action) => {
     fetch(`${API_BASE_URL}/api/orders/${deliveryModal.order.id}/status`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'Delivered', paid_now: Number(deliveryModal.paidNow), action: action })
@@ -731,7 +774,6 @@ function OrdersPage() {
 
   const printBill = (order) => {
     const itemsList = order.items_details.split(',').map(item => `<li>${item.trim()}</li>`).join('');
-    
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
       <html>
@@ -767,7 +809,6 @@ function OrdersPage() {
             <h1>SweetCraft</h1>
             <p>Main Market, Deoghar, Jharkhand | Phone: +91 98765 43210</p>
           </div>
-          
           <div class="details">
             <div class="details-col">
               <p><strong>Billed To:</strong> ${order.customer_name}</p>
@@ -779,14 +820,12 @@ function OrdersPage() {
               <p><strong>Delivery Date:</strong> ${order.delivery_date}</p>
             </div>
           </div>
-
           <div class="items-box">
             <h3>Order Details</h3>
             <ul>
               ${itemsList}
             </ul>
           </div>
-
           <div class="totals-container">
             <table class="totals">
               <tr>
@@ -808,13 +847,11 @@ function OrdersPage() {
               </tr>
             </table>
           </div>
-
           <div class="footer">
             <strong>Thank you for your business!</strong>
             <p>For any queries or future orders, please contact us at +91 98765 43210</p>
             <p style="margin-top: 15px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;">Powered by Poddar Solutions</p>
           </div>
-          
           <script>
             window.onload = function() { 
               setTimeout(() => { window.print(); }, 200); 
@@ -824,12 +861,19 @@ function OrdersPage() {
       </html>
     `);
     printWindow.document.close();
-};
+  };
 
   const shareWhatsapp = (order) => {
       const text = `Hello ${order.customer_name},\nHere are your order details from *SweetCraft*:\n\n*Items:* \n${order.items_details.split(', ').join('\n')}\n\n*Total Amount:* ₹${order.total_amount}\n*Advance Paid:* ₹${order.advance_paid}\n*Due Amount:* ₹${order.total_amount - order.advance_paid}\n*Delivery Date:* ${order.delivery_date}\n\nThank you!`;
       window.open(`https://wa.me/91${order.phone}?text=${encodeURIComponent(text)}`, '_blank');
   };
+
+  // Search Filter
+  const filteredOrders = orders.filter(o => 
+    o.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (o.phone && o.phone.includes(searchQuery)) ||
+    o.items_details.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -844,8 +888,14 @@ function OrdersPage() {
           <UI_Input label="Delivery Date" type="date" value={formData.delivery_date} onChange={e => setFormData({ ...formData, delivery_date: e.target.value })} required />
           
           <div className="lg:col-span-3 flex flex-col md:flex-row gap-4 items-end">
-             <div className="flex-1 w-full"><UI_Select label="Select Menu Item" options={[{label:'Choose...', value:''}, ...menuItems.map(m=>({label:m.name, value:m.name}))]} value={currentItem} onChange={e=>setCurrentItem(e.target.value)} /></div>
-             <div className="w-full md:w-32"><UI_Input label="Qty" type="number" value={currentQty} onChange={e=>setCurrentQty(e.target.value)} /></div>
+             <div className="flex-1 w-full">
+                <UI_Input label="Search/Select Menu Item (Or type custom)" list="order-menu-items" placeholder="Search item..." value={currentItem} onChange={e=>handleItemSelect(e.target.value)} />
+                <datalist id="order-menu-items">
+                    {menuItems.map(m => <option key={m.id} value={m.name} />)}
+                </datalist>
+             </div>
+             <div className="w-full md:w-28"><UI_Input label="Price/Unit" type="number" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} placeholder="₹" /></div>
+             <div className="w-full md:w-28"><UI_Input label="Qty" type="number" value={currentQty} onChange={e=>setCurrentQty(e.target.value)} /></div>
              <UI_Button onClick={addItemToOrder} variant="secondary" className="!w-full md:!w-auto h-[50px]"><Package size={18}/> Add Item</UI_Button>
           </div>
 
@@ -877,18 +927,26 @@ function OrdersPage() {
         </form>
       </div>
 
-      <h2 className="text-2xl font-black text-zinc-900 dark:text-white mt-8 mb-4">Pending & In Progress</h2>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mt-8 mb-4 gap-4">
+          <h2 className="text-2xl font-black text-zinc-900 dark:text-white">Pending & In Progress</h2>
+          <div className="relative w-full md:w-72">
+             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none"><Search className="text-zinc-400" size={16} /></div>
+             <input type="text" placeholder="Search customer, phone or item..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all dark:text-white" />
+          </div>
+      </div>
+      
       <div className="flex flex-col gap-4">
-        {orders.filter(o => o.status !== 'Delivered').map(order => (
-          <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[1.5rem] p-4 border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col md:flex-row justify-between items-start gap-4 relative overflow-hidden">
+        {filteredOrders.filter(o => o.status !== 'Delivered').map(order => (
+          <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[1.5rem] p-4 border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col md:flex-row justify-between items-start gap-4 relative overflow-hidden group">
             <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${order.status === 'Pending' ? 'bg-orange-400' : 'bg-blue-500'}`}></div>
             <div className="pl-3 flex-1 flex flex-col md:flex-row gap-4 w-full">
               <div className="flex-1">
                 <div className="flex justify-between items-start">
                   <h3 className="text-lg font-bold dark:text-white">{order.customer_name}</h3>
                   <div className="flex gap-2 mb-2 md:mb-0">
-                     <button onClick={()=>printBill(order)} className="p-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 rounded-lg hover:scale-105 transition"><Printer size={16}/></button>
-                     <button onClick={()=>shareWhatsapp(order)} className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-lg hover:scale-105 transition"><MessageCircle size={16}/></button>
+                     <button onClick={()=>printBill(order)} className="p-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 rounded-lg hover:scale-105 transition" title="Print Bill"><Printer size={16}/></button>
+                     <button onClick={()=>shareWhatsapp(order)} className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-lg hover:scale-105 transition" title="Share on WhatsApp"><MessageCircle size={16}/></button>
+                     <button onClick={() => handleDeleteOrder(order.id, order.customer_name)} className="p-2 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-lg hover:scale-105 transition opacity-100 md:opacity-0 md:group-hover:opacity-100" title="Delete/Cancel Order"><Trash2 size={16}/></button>
                   </div>
                 </div>
                 <p className="text-sm text-zinc-500 font-medium">📞 {order.phone} • <Clock size={12} className="inline mb-0.5" /> Delivers {order.delivery_date}</p>
@@ -907,31 +965,38 @@ function OrdersPage() {
             </div>
           </div>
         ))}
-        {orders.filter(o => o.status !== 'Delivered').length === 0 && <p className="text-zinc-500 p-4">No pending orders.</p>}
+        {filteredOrders.filter(o => o.status !== 'Delivered').length === 0 && <p className="text-zinc-500 p-4">No pending orders match your search.</p>}
       </div>
 
       <h2 className="text-2xl font-black text-zinc-900 dark:text-white mt-8 mb-4">Delivered Orders</h2>
       <div className="flex flex-col gap-4">
-        {orders.filter(o => o.status === 'Delivered').map(order => (
-          <div key={order.id} className="bg-zinc-50 dark:bg-zinc-900/50 opacity-75 hover:opacity-100 transition-opacity rounded-[1.5rem] p-4 border border-zinc-200 dark:border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden">
+        {filteredOrders.filter(o => o.status === 'Delivered').map(order => (
+          <div key={order.id} className="bg-zinc-50 dark:bg-zinc-900/50 opacity-75 hover:opacity-100 transition-opacity rounded-[1.5rem] p-4 border border-zinc-200 dark:border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden group">
             <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500"></div>
             <div className="pl-3 flex-1 flex flex-col md:flex-row gap-4 md:items-center w-full">
               <div className="flex-1">
                 <div className="flex items-center gap-3">
                     <h3 className="text-lg font-bold dark:text-white">{order.customer_name} <span className="text-emerald-600 text-xs ml-2"><CheckCircle size={14} className="inline" /> Delivered</span></h3>
-                    <button onClick={()=>printBill(order)} className="p-1.5 text-zinc-500 hover:text-zinc-800 dark:hover:text-white"><Printer size={14}/></button>
+                    <div className="flex gap-2 ml-2">
+                       <button onClick={()=>printBill(order)} className="p-1.5 text-zinc-500 hover:text-zinc-800 dark:hover:text-white transition" title="Print Bill"><Printer size={14}/></button>
+                       <button onClick={()=>shareWhatsapp(order)} className="p-1.5 text-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition" title="Share on WhatsApp"><MessageCircle size={14}/></button>
+                    </div>
                 </div>
-                <p className="text-sm text-zinc-500 font-medium">📞 {order.phone} • {order.items_details}</p>
+                <p className="text-sm text-zinc-500 font-medium mt-1">📞 {order.phone} • {order.items_details}</p>
               </div>
-              <div className="flex flex-col md:items-end justify-center min-w-[120px]">
+              <div className="flex flex-col md:items-end justify-center min-w-[120px] mt-2 md:mt-0">
                 <p className="font-black text-lg dark:text-white">Total: ₹{order.total_amount}</p>
                 {order.discount > 0 ? <p className="text-emerald-500 font-bold text-xs">Discount/Saved: ₹{order.discount}</p> : null}
                 {order.is_due_cleared ? <p className="text-emerald-500 font-bold text-xs">Dues Cleared</p> : <p className="text-orange-500 font-bold text-xs">Due in Udhari</p>}
               </div>
             </div>
+            {/* Delivered Order Delete Button (Optional, agar isko bhi delete karna ho) */}
+            <div className="hidden md:flex flex-col justify-center border-l border-zinc-200 dark:border-zinc-800 pl-3">
+                <button onClick={() => handleDeleteOrder(order.id, order.customer_name)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition opacity-0 group-hover:opacity-100" title="Delete Log"><Trash2 size={16}/></button>
+            </div>
           </div>
         ))}
-        {orders.filter(o => o.status === 'Delivered').length === 0 && <p className="text-zinc-500 p-4">No delivered orders yet.</p>}
+        {filteredOrders.filter(o => o.status === 'Delivered').length === 0 && <p className="text-zinc-500 p-4">No delivered orders match your search.</p>}
       </div>
 
       {deliveryModal.isOpen && (
@@ -961,7 +1026,6 @@ function OrdersPage() {
 }
 
 // --- DEBT PAGE ---
-// --- DEBT PAGE ---
 function DebtPage() {
   const [customers, setCustomers] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
@@ -971,10 +1035,11 @@ function DebtPage() {
   const [selectedItems, setSelectedItems] = useState([]);
   const [currentItem, setCurrentItem] = useState('');
   const [currentQty, setCurrentQty] = useState('');
+  const [currentPrice, setCurrentPrice] = useState('');
   const [calculatedTotal, setCalculatedTotal] = useState(0);
 
-  // Naya state history modal ke liye
   const [historyModal, setHistoryModal] = useState({ isOpen: false, customer: null, logs: [] });
+  const [searchQuery, setSearchQuery] = useState(''); 
 
   const fetchCustomers = () => { fetch(API_BASE_URL + '/api/customers').then(res => res.json()).then(setCustomers).catch(() => { }); };
   useEffect(() => { 
@@ -988,18 +1053,37 @@ function DebtPage() {
       .then(() => { setFormData({ name: '', phone: '', address: '' }); fetchCustomers(); });
   };
 
+  // NAYA: Customer Delete karne ka function
+  const handleDeleteCustomer = async (id, name) => {
+    if (!window.confirm(`Kya aap sach me '${name}' ka poora khata hamesha ke liye delete karna chahte hain? Iska saara hisaab mit jayega.`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/customers/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchCustomers();
+    } catch (error) {
+      alert("Delete fail ho gaya. Network check karein.");
+    }
+  };
+
+  const handleItemSelect = (val) => {
+    setCurrentItem(val);
+    const found = menuItems.find(m => m.name === val);
+    if (found) setCurrentPrice(found.price);
+    else setCurrentPrice('');
+  };
+
   const addItemToUdhar = () => {
-    if(currentItem && currentQty) {
+    if(currentItem && currentQty && currentPrice) {
         const itemDetails = menuItems.find(m => m.name === currentItem);
-        const unit = itemDetails ? itemDetails.unit : 'pc';
-        const price = itemDetails ? itemDetails.price : 0;
-        const addAmount = price * Number(currentQty);
+        const unit = itemDetails ? itemDetails.unit : 'pc/kg';
+        const addAmount = Number(currentPrice) * Number(currentQty);
         
-        setSelectedItems([...selectedItems, `${currentItem} (${currentQty} ${unit})`]);
+        setSelectedItems([...selectedItems, `${currentItem} (${currentQty} ${unit}) - ₹${addAmount}`]);
         const newTotal = calculatedTotal + addAmount;
         setCalculatedTotal(newTotal);
-        setTxnModal({...txnModal, amount: newTotal}); // auto-update amount
-        setCurrentItem(''); setCurrentQty('');
+        setTxnModal({...txnModal, amount: newTotal});
+        setCurrentItem(''); setCurrentQty(''); setCurrentPrice('');
+    } else {
+        alert("Kripya Item Name, Qty, aur Price teeno dalein.");
     }
   };
 
@@ -1025,13 +1109,18 @@ function DebtPage() {
       setCalculatedTotal(0);
   };
 
-  // Naya function history fetch karne ke liye
   const handleViewHistory = (customer) => {
     fetch(`${API_BASE_URL}/api/customers/${customer.id}/history`)
       .then(res => res.json())
       .then(data => setHistoryModal({ isOpen: true, customer, logs: data }))
       .catch(() => {});
   };
+
+  // Search Filter
+  const filteredCustomers = customers.filter(c => 
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (c.phone && c.phone.includes(searchQuery))
+  );
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -1046,12 +1135,28 @@ function DebtPage() {
         </form>
       </div>
 
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mt-8 mb-4 gap-4">
+          <h2 className="text-2xl font-black text-zinc-900 dark:text-white">Udhari List</h2>
+          <div className="relative w-full md:w-72">
+             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none"><Search className="text-zinc-400" size={16} /></div>
+             <input type="text" placeholder="Search customer or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all dark:text-white" />
+          </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {customers.map(c => (
-          <div key={c.id} className="bg-white dark:bg-zinc-900 rounded-[2rem] p-6 border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
+        {filteredCustomers.map(c => (
+          <div key={c.id} className="bg-white dark:bg-zinc-900 rounded-[2rem] p-6 border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between group">
             <div>
-              <h3 className="font-bold text-2xl dark:text-white mb-1">{c.name}</h3>
-              <p className="text-sm text-zinc-500 font-medium mb-4">📞 {c.phone}</p>
+              {/* NAYA: Delete Button Header me add kar diya */}
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-bold text-2xl dark:text-white mb-1">{c.name}</h3>
+                  <p className="text-sm text-zinc-500 font-medium mb-4">📞 {c.phone}</p>
+                </div>
+                <button onClick={() => handleDeleteCustomer(c.id, c.name)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full hover:scale-110 transition-transform opacity-100 md:opacity-0 md:group-hover:opacity-100" title="Delete Khata">
+                  <Trash2 size={16} />
+                </button>
+              </div>
 
               <div className="bg-zinc-50 dark:bg-zinc-950/50 p-4 rounded-2xl mb-6 flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
                 <span className="text-zinc-500 font-bold">Total Due</span>
@@ -1068,6 +1173,7 @@ function DebtPage() {
             </div>
           </div>
         ))}
+        {filteredCustomers.length === 0 && <p className="text-zinc-500 col-span-full">Koi customer nahi mila.</p>}
       </div>
 
       {/* Transaction Modal */}
@@ -1081,8 +1187,14 @@ function DebtPage() {
                {txnModal.action === 'give_udhar' && (
                  <>
                    <div className="flex flex-col md:flex-row gap-3 items-end">
-                     <div className="flex-1 w-full"><UI_Select label="Select Items" options={[{label:'Choose...', value:''}, ...menuItems.map(m=>({label:m.name, value:m.name}))]} value={currentItem} onChange={e=>setCurrentItem(e.target.value)} /></div>
-                     <div className="w-full md:w-24"><UI_Input label="Qty" type="number" value={currentQty} onChange={e=>setCurrentQty(e.target.value)} /></div>
+                     <div className="flex-1 w-full">
+                         <UI_Input label="Search/Select Item (Or custom)" list="udhar-menu-items" placeholder="Search item..." value={currentItem} onChange={e=>handleItemSelect(e.target.value)} />
+                         <datalist id="udhar-menu-items">
+                             {menuItems.map(m => <option key={m.id} value={m.name} />)}
+                         </datalist>
+                     </div>
+                     <div className="w-full md:w-20"><UI_Input label="Price" type="number" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} placeholder="₹" /></div>
+                     <div className="w-full md:w-20"><UI_Input label="Qty" type="number" value={currentQty} onChange={e=>setCurrentQty(e.target.value)} /></div>
                      <UI_Button onClick={addItemToUdhar} variant="secondary" className="!w-full md:!w-auto h-[50px]"><Package size={18}/> Add</UI_Button>
                    </div>
                    
@@ -1106,7 +1218,6 @@ function DebtPage() {
         </div>
       )}
 
-      {/* NAYA: History Modal */}
       {historyModal.isOpen && (
         <div className="fixed inset-0 bg-zinc-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-6 lg:p-8 w-full max-w-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 relative animate-fade-in flex flex-col max-h-[90vh]">
@@ -1197,6 +1308,7 @@ function MenuManagerPage() {
   const [menuItems, setMenuItems] = useState([]);
   const [formData, setFormData] = useState({ name: '', desc: '', category: 'Sweets', price: '', unit: 'pc', popular: false, in_stock: true });
   const [imageFile, setImageFile] = useState(null);
+  const [searchQuery, setSearchQuery] = useState(''); // Search state
   
   const [editMode, setEditMode] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -1253,6 +1365,11 @@ function MenuManagerPage() {
     fetchMenu();
   };
 
+  const filteredMenu = menuItems.filter(item => 
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (item.desc && item.desc.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
   return (
     <div className="animate-fade-in space-y-6">
       <div className="pt-2"><h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Menu Manager</h1></div>
@@ -1291,8 +1408,16 @@ function MenuManagerPage() {
         </form>
       </div>
 
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mt-8 mb-4 gap-4">
+          <h2 className="text-2xl font-black text-zinc-900 dark:text-white">All Menu Items</h2>
+          <div className="relative w-full md:w-72">
+             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none"><Search className="text-zinc-400" size={16} /></div>
+             <input type="text" placeholder="Search menu..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all dark:text-white" />
+          </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {menuItems.map(item => (
+        {filteredMenu.map(item => (
           <div key={item.id} className={`bg-white dark:bg-zinc-900 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-sm overflow-hidden flex flex-col relative ${!item.in_stock ? 'opacity-60 grayscale' : ''}`}>
             {!item.in_stock && <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-black uppercase px-2 py-1 rounded-md z-10 shadow-md">Out of Stock</div>}
             {item.image_url ? (
@@ -1313,6 +1438,7 @@ function MenuManagerPage() {
             </div>
           </div>
         ))}
+        {filteredMenu.length === 0 && <p className="text-zinc-500 col-span-full">No items found.</p>}
       </div>
     </div>
   );
@@ -1491,6 +1617,16 @@ function ExpensePage() {
       .then(() => { setFormData({ item_name: '', amount: '' }); fetchExpenses(); });
   };
 
+  const handleDeleteExpense = async (id) => {
+    if (!window.confirm("Kya aap sach me is expense ko delete karna chahte hain?")) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/expenses/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchExpenses();
+    } catch (error) {
+      alert("Delete fail ho gaya.");
+    }
+  };
+
   return (
     <div className="animate-fade-in space-y-6">
       <div className="pt-2"><h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Daily Expenses</h1></div>
@@ -1516,12 +1652,17 @@ function ExpensePage() {
       <div className="space-y-3">
          {expenses.items.length === 0 && <p className="text-zinc-500">Koi kharcha entry nahi hai aaj ka.</p>}
          {expenses.items.map(e => (
-            <div key={e.id} className="bg-white dark:bg-zinc-900 p-4 rounded-[1.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex justify-between items-center">
+            <div key={e.id} className="bg-white dark:bg-zinc-900 p-4 rounded-[1.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex justify-between items-center group">
                 <div>
                    <h3 className="font-bold dark:text-white">{e.item_name}</h3>
                    <p className="text-xs text-zinc-500 font-medium">{e.date}</p>
                 </div>
-                <div className="text-rose-600 dark:text-rose-400 font-black text-lg">- ₹{e.amount}</div>
+                <div className="flex items-center gap-4">
+                   <div className="text-rose-600 dark:text-rose-400 font-black text-lg">- ₹{e.amount}</div>
+                   <button onClick={() => handleDeleteExpense(e.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full hover:scale-110 transition-transform opacity-100 md:opacity-0 md:group-hover:opacity-100" title="Delete Expense">
+                     <Trash2 size={16} />
+                   </button>
+                </div>
             </div>
          ))}
       </div>
@@ -1544,7 +1685,5 @@ function MahajanPage() {
     </div>
   );
 }
-
-
 
 export default App;

@@ -372,6 +372,13 @@ def update_order_status(id):
     db.session.commit()
     return jsonify({"message": "Status updated and synced with Udhari book!"})
 
+@app.route('/api/orders/<int:id>', methods=['DELETE'])
+def delete_order(id):
+    order = Order.query.get_or_404(id)
+    db.session.delete(order)
+    db.session.commit()
+    return jsonify({"message": "Order deleted successfully!"})
+
 @app.route('/api/customers', methods=['GET', 'POST'])
 def manage_customers():
     if request.method == 'POST':
@@ -415,6 +422,16 @@ def get_customer_history(id):
         "amount": round(l.amount, 2), 
         "items_details": l.items_details or '-'
     } for l in logs])
+
+@app.route('/api/customers/<int:id>', methods=['DELETE'])
+def delete_customer(id):
+    customer = Customer.query.get_or_404(id)
+    # Pehle us customer ka sara ledger/history delete karenge taki database me error na aaye
+    CustomerLedger.query.filter_by(customer_id=id).delete()
+    # Phir customer ko delete karenge
+    db.session.delete(customer)
+    db.session.commit()
+    return jsonify({"message": f"Customer {customer.name} aur unka khata delete ho gaya!"})
 
 @app.route('/api/reports', methods=['GET'])
 def get_all_reports():
@@ -511,6 +528,13 @@ def get_today_staff_pay():
     logs = Ledger.query.filter(db.func.date(Ledger.date_time) == today, Ledger.txn_type == 'Advance').all()
     total_pay = sum(l.amount for l in logs)
     return jsonify({"total_pay_today": total_pay})
+
+@app.route('/api/expenses/<int:id>', methods=['DELETE'])
+def delete_expense(id):
+    expense = DailyExpense.query.get_or_404(id)
+    db.session.delete(expense)
+    db.session.commit()
+    return jsonify({"message": "Expense deleted!"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5000)

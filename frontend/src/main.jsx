@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import './index.css' // 👈 BINA IS LINE KE TAILWIND NAHI CHALEGA
+import './index.css' 
+import './i18n' // 👈 BAS YE NAYI LINE ADD KARNI HAI
 import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(

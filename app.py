@@ -110,6 +110,9 @@ class MenuItem(db.Model):
 
 with app.app_context():
     db.create_all()
+    # Enable WAL mode for 10x faster saving and no lock errors
+    db.session.execute(db.text('PRAGMA journal_mode=WAL;'))
+    db.session.commit()
 
 # --- ROUTES ---
 
@@ -232,8 +235,14 @@ def manage_staff():
         db.session.commit()
         return jsonify({"message": "Staff member added!"}), 201
     
+    # Client se exact date lena ya IST fallback use karna timezone bug rokne ke liye
+    client_date_str = request.args.get('date')
+    if client_date_str:
+        today = datetime.strptime(client_date_str, '%Y-%m-%d').date()
+    else:
+        today = (datetime.utcnow() + timedelta(hours=5, minutes=30)).date()
+        
     staff_list = Staff.query.all()
-    today = datetime.today().date()
     result = []
     for s in staff_list:
         att = Attendance.query.filter_by(staff_id=s.id, date=today).first()
@@ -348,10 +357,11 @@ def update_order_status(id):
                 customer = Customer(name=order.customer_name, phone=order.phone, address=order.address, balance=due_amount)
                 db.session.add(customer)
                 db.session.flush() 
-                db.session.add(CustomerLedger(customer_id=customer.id, txn_type=f'Order #{order.id} Due', amount=due_amount))
+                # Yahan items_details pass kiya gaya hai
+                db.session.add(CustomerLedger(customer_id=customer.id, txn_type=f'Order #{order.id} Due', amount=due_amount, items_details=order.items_details))
             else:
                 customer.balance += due_amount
-                db.session.add(CustomerLedger(customer_id=customer.id, txn_type=f'Order #{order.id} Due', amount=due_amount))
+                db.session.add(CustomerLedger(customer_id=customer.id, txn_type=f'Order #{order.id} Due', amount=due_amount, items_details=order.items_details))
             order.is_due_cleared = False
         else:
             if due_amount > 0:

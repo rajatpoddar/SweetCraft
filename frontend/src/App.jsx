@@ -4,12 +4,13 @@ import {
   AlertTriangle, Package, Users, ShoppingBag,
   IndianRupee, LayoutDashboard, Menu, X, UserPen, History,
   CheckCircle, Clock, ArrowDownRight, ArrowUpRight, Edit2, RotateCcw,
-  Moon, Sun, LogOut, ChevronRight, Droplets, Trash2, Store, ImagePlus, Search, Sparkles, Flame, Info, Phone, MapPin, LayoutGrid, List, Coffee, ReceiptText, Briefcase, Printer, MessageCircle
+  Moon, Sun, LogOut, ChevronRight, Droplets, Trash2, Store, ImagePlus, Search, Sparkles, Flame, Info, Phone, MapPin, LayoutGrid, List, Coffee, ReceiptText, Briefcase, Printer, MessageCircle, Languages
 } from 'lucide-react';
 
 import MenuCard from './MenuCard';
+import { useTranslation } from 'react-i18next';
 
-const API_BASE_URL = '';
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:5000' : '';
 
 
 // --- MAIN APP WRAPPER WITH THEME & AUTH ---
@@ -56,6 +57,14 @@ function App() {
 
 // Admin Layout Component
 function AdminLayout({ logout, toggleTheme, isDarkMode }) {
+  const { t, i18n } = useTranslation();
+
+  const toggleLanguage = () => {
+    const newLang = i18n.language === 'en' ? 'hi' : 'en';
+    i18n.changeLanguage(newLang);
+    localStorage.setItem('app_lang', newLang);
+  };
+
   return (
     <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950 overflow-hidden font-sans text-zinc-900 dark:text-zinc-50 antialiased selection:bg-purple-500/30">
       {/* Desktop Sidebar */}
@@ -70,25 +79,30 @@ function AdminLayout({ logout, toggleTheme, isDarkMode }) {
           </div>
         </div>
         <nav className="px-4 py-2 space-y-2 flex-1 overflow-y-auto">
-          <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Overview" />
-          <NavItem to="/inventory" icon={<Package size={20} />} label="Stock & Inventory" />
-          <NavItem to="/orders" icon={<ShoppingBag size={20} />} label="Party Orders" />
-          <NavItem to="/staff" icon={<Users size={20} />} label="Staff Khata" />
-          <NavItem to="/debt" icon={<IndianRupee size={20} />} label="Market Udhari" />
-          <NavItem to="/reports" icon={<History size={20} />} label="All Reports" />
-          <NavItem to="/menu-manager" icon={<Store size={20} />} label="Menu Manager" />
-          <NavItem to="/expenses" icon={<ReceiptText size={20} />} label="Daily Expenses" />
-          <NavItem to="/mahajan" icon={<Briefcase size={20} />} label="Mahajan Manager" />
+          <NavItem to="/" icon={<LayoutDashboard size={20} />} label={t("Overview")} />
+          <NavItem to="/inventory" icon={<Package size={20} />} label={t("Stock & Inventory")} />
+          <NavItem to="/orders" icon={<ShoppingBag size={20} />} label={t("Party Orders")} />
+          <NavItem to="/staff" icon={<Users size={20} />} label={t("Staff Khata")} />
+          <NavItem to="/debt" icon={<IndianRupee size={20} />} label={t("Market Udhari")} />
+          <NavItem to="/reports" icon={<History size={20} />} label={t("All Reports")} />
+          <NavItem to="/menu-manager" icon={<Store size={20} />} label={t("Menu Manager")} />
+          <NavItem to="/expenses" icon={<ReceiptText size={20} />} label={t("Daily Expenses")} />
+          <NavItem to="/mahajan" icon={<Briefcase size={20} />} label={t("Mahajan Manager")} />
         </nav>
         <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-zinc-500">Theme</span>
-            <button onClick={toggleTheme} className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all">
-              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
+            <span className="text-sm font-semibold text-zinc-500">{t("Theme")} / Lang</span>
+            <div className="flex gap-2">
+              <button onClick={toggleLanguage} className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all" title="Change Language">
+                <Languages size={18} />
+              </button>
+              <button onClick={toggleTheme} className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all">
+                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+            </div>
           </div>
           <button onClick={logout} className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold rounded-2xl transition-all active:scale-95">
-            <LogOut size={18} /> Logout
+            <LogOut size={18} /> {t("Logout")}
           </button>
         </div>
       </aside>
@@ -102,9 +116,14 @@ function AdminLayout({ logout, toggleTheme, isDarkMode }) {
             </div>
             <h1 className="text-xl font-black text-zinc-800 dark:text-white tracking-tight">SweetCraft</h1>
           </div>
-          <button onClick={toggleTheme} className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all">
-            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={toggleLanguage} className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all">
+              <Languages size={20} />
+            </button>
+            <button onClick={toggleTheme} className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all">
+              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto w-full max-w-7xl mx-auto px-4 sm:px-6 md:px-8 pt-6 pb-28 md:pb-8">
@@ -123,11 +142,11 @@ function AdminLayout({ logout, toggleTheme, isDarkMode }) {
 
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-2xl border-t border-zinc-200/50 dark:border-zinc-800/50 pb-safe pt-2 px-4 sm:px-6 z-50">
           <div className="flex justify-between items-center pb-2">
-            <BottomNavItem to="/" icon={<LayoutDashboard size={24} />} label="Home" />
-            <BottomNavItem to="/inventory" icon={<Package size={24} />} label="Stock" />
-            <BottomNavItem to="/orders" icon={<ShoppingBag size={24} />} label="Orders" />
-            <BottomNavItem to="/debt" icon={<IndianRupee size={24} />} label="Udhari" />
-            <BottomNavItem to="/menu-manager" icon={<Store size={24} />} label="Menu" />
+            <BottomNavItem to="/" icon={<LayoutDashboard size={24} />} label={t("Home")} />
+            <BottomNavItem to="/inventory" icon={<Package size={24} />} label={t("Stock")} />
+            <BottomNavItem to="/orders" icon={<ShoppingBag size={24} />} label={t("Orders")} />
+            <BottomNavItem to="/debt" icon={<IndianRupee size={24} />} label={t("Udhari")} />
+            <BottomNavItem to="/menu-manager" icon={<Store size={24} />} label={t("Menu")} />
           </div>
         </nav>
       </div>
@@ -226,6 +245,7 @@ function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
 
 // --- DASHBOARD PAGE ---
 function Dashboard() {
+  const { t } = useTranslation(); // 👈 NAYA HOOK ADD KIYA
   const [alerts, setAlerts] = useState({ expiring_items: [], upcoming_orders: [], low_stock_items: [] });
   const [staffList, setStaffList] = useState([]);
   const [metrics, setMetrics] = useState({ totalUdhari: 0, totalPendingOrders: 0, totalPresentStaff: 0 });
@@ -248,20 +268,20 @@ function Dashboard() {
   return (
     <div className="animate-fade-in space-y-8">
       <div className="pt-2">
-        <h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Overview</h1>
-        <p className="text-zinc-500 dark:text-zinc-400 mt-2 font-medium text-lg">Welcome back, here's your daily summary.</p>
+        <h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">{t("Overview")}</h1>
+        <p className="text-zinc-500 dark:text-zinc-400 mt-2 font-medium text-lg">{t("Welcome back, here's your daily summary.")}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-        <MetricCard title="Staff Present" value={metrics.totalPresentStaff} sub={`/ ${staffList.length}`} icon={<Users size={28} />} gradient="from-emerald-400 to-teal-500" />
-        <MetricCard title="Market Udhari" value={`₹${metrics.totalUdhari}`} icon={<IndianRupee size={28} />} gradient="from-orange-400 to-rose-500" />
-        <MetricCard title="Pending Orders" value={metrics.totalPendingOrders} icon={<ShoppingBag size={28} />} gradient="from-indigo-400 to-purple-500" />
+        <MetricCard title={t("Staff Present")} value={metrics.totalPresentStaff} sub={`/ ${staffList.length}`} icon={<Users size={28} />} gradient="from-emerald-400 to-teal-500" />
+        <MetricCard title={t("Market Udhari")} value={`₹${metrics.totalUdhari}`} icon={<IndianRupee size={28} />} gradient="from-orange-400 to-rose-500" />
+        <MetricCard title={t("Pending Orders")} value={metrics.totalPendingOrders} icon={<ShoppingBag size={28} />} gradient="from-indigo-400 to-purple-500" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {alerts.expiring_items?.length > 0 && (
           <div className="bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 p-6 md:p-8 rounded-[2.5rem]">
-            <h2 className="text-xl font-extrabold text-red-700 dark:text-red-400 flex items-center mb-6"><AlertTriangle className="mr-2" size={24} /> Expiring Stock</h2>
+            <h2 className="text-xl font-extrabold text-red-700 dark:text-red-400 flex items-center mb-6"><AlertTriangle className="mr-2" size={24} /> {t("Expiring Stock")}</h2>
             <div className="space-y-3">
               {alerts.expiring_items.map(item => (
                 <div key={item.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
@@ -278,7 +298,7 @@ function Dashboard() {
 
         {alerts.upcoming_orders?.length > 0 && (
           <div className="bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/30 p-6 md:p-8 rounded-[2.5rem]">
-            <h2 className="text-xl font-extrabold text-purple-700 dark:text-purple-400 flex items-center mb-6"><Clock className="mr-2" size={24} /> Upcoming Orders</h2>
+            <h2 className="text-xl font-extrabold text-purple-700 dark:text-purple-400 flex items-center mb-6"><Clock className="mr-2" size={24} /> {t("Upcoming Orders")}</h2>
             <div className="space-y-3">
               {alerts.upcoming_orders.map(order => (
                 <div key={order.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
@@ -292,7 +312,7 @@ function Dashboard() {
 
         {alerts.low_stock_items?.length > 0 && (
           <div className="bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 p-6 md:p-8 rounded-[2.5rem] lg:col-span-2">
-            <h2 className="text-xl font-extrabold text-orange-700 dark:text-orange-400 flex items-center mb-6"><AlertTriangle className="mr-2" size={24} /> Low Stock Alerts</h2>
+            <h2 className="text-xl font-extrabold text-orange-700 dark:text-orange-400 flex items-center mb-6"><AlertTriangle className="mr-2" size={24} /> {t("Low Stock Alerts")}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {alerts.low_stock_items.map(item => (
                 <div key={'low'+item.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
@@ -487,7 +507,10 @@ function StaffPage() {
   // Naya state modal ke liye
   const [payModal, setPayModal] = useState({ isOpen: false, staffId: null, action: '', amount: '', note: '' });
 
-  const fetchStaff = () => { fetch(API_BASE_URL + '/api/staff').then(res => res.json()).then(setStaffList).catch(() => { }); };
+  const fetchStaff = () => { 
+    const todayDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().split('T')[0];
+    fetch(API_BASE_URL + `/api/staff?date=${todayDate}`).then(res => res.json()).then(setStaffList).catch(() => { }); 
+  };
   const fetchTodayPay = () => { fetch(API_BASE_URL + '/api/staff/today_pay').then(res => res.json()).then(data => setTodayPay(data.total_pay_today)).catch(() => { }); };
   
   useEffect(() => { fetchStaff(); fetchTodayPay(); }, []);
@@ -563,7 +586,17 @@ function StaffPage() {
               {staff.today_attendance ? (
                 <div className="bg-zinc-50 dark:bg-zinc-950/50 p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
                   <span className="text-zinc-500 font-bold text-sm">Attendance</span>
-                  <span className="font-bold">{staff.today_attendance}</span>
+                  <div className="flex items-center gap-3">
+                    <span className={`font-bold ${staff.today_attendance === 'Present' ? 'text-emerald-600' : staff.today_attendance === 'Absent' ? 'text-red-600' : 'text-orange-600'}`}>
+                      {staff.today_attendance}
+                    </span>
+                    <button 
+                      onClick={() => setStaffList(staffList.map(s => s.id === staff.id ? { ...s, today_attendance: null } : s))} 
+                      className="text-blue-500 hover:text-blue-600 text-sm font-bold bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-lg transition-all"
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex gap-2">
@@ -572,6 +605,7 @@ function StaffPage() {
                   <UI_Button onClick={() => handleAttendance(staff.id, 'Absent')} variant="danger" className="!py-2 !text-sm flex-1">Absent</UI_Button>
                 </div>
               )}
+              
               <div className="flex gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <UI_Button onClick={() => setPayModal({isOpen: true, staffId: staff.id, action: 'advance', amount: '', note: ''})} variant="danger" className="!py-2 !text-sm flex-1">Pay</UI_Button>
                 <UI_Button onClick={() => setPayModal({isOpen: true, staffId: staff.id, action: 'clear', amount: staff.balance, note: 'Settle all dues'})} variant="outline" className="!py-2 !text-sm flex-1">Settle</UI_Button>
@@ -1286,6 +1320,7 @@ function MenuManagerPage() {
 
 // --- PUBLIC: CUSTOMER MENU CARD ---
 function PublicMenuCard({ toggleTheme, isDarkMode }) {
+  const { t } = useTranslation(); // 👈 NAYA HOOK ADD KIYA
   const [menuItems, setMenuItems] = useState([]);
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1314,7 +1349,7 @@ function PublicMenuCard({ toggleTheme, isDarkMode }) {
              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20"><Droplets className="text-white" size={20} /></div>
              <div>
                <h1 className="text-xl font-black tracking-tight leading-none dark:text-white">SweetCraft</h1>
-               <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Premium Menu</span>
+               <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{t("Premium Menu")}</span>
              </div>
            </div>
            <button onClick={toggleTheme} className="p-2 rounded-full bg-white dark:bg-zinc-900 shadow-sm border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 active:scale-95">
@@ -1325,7 +1360,7 @@ function PublicMenuCard({ toggleTheme, isDarkMode }) {
         {/* Search */}
         <div className="relative max-w-md mx-auto mb-6 w-full animate-fade-in" style={{ animationDelay: '100ms' }}>
           <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none"><Search className="text-zinc-400" size={20} /></div>
-          <input type="text" placeholder="Search sweets, snacks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-full py-3.5 pl-12 pr-4 shadow-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all dark:text-white backdrop-blur-md" />
+          <input type="text" placeholder={t("Search for sweets, snacks...")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-full py-3.5 pl-12 pr-4 shadow-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all dark:text-white backdrop-blur-md" />
         </div>
 
         {/* Categories & View Toggle */}
@@ -1358,10 +1393,10 @@ function PublicMenuCard({ toggleTheme, isDarkMode }) {
                 <div key={item.id} className={`group bg-white dark:bg-zinc-900/80 backdrop-blur-lg border border-zinc-200/80 dark:border-zinc-800/80 rounded-[2rem] shadow-sm overflow-hidden flex flex-col relative ${item.in_stock === false ? 'opacity-60 grayscale' : ''}`}>
                   {item.in_stock === false && (
                     <div className="absolute inset-0 bg-zinc-900/10 dark:bg-white/5 z-20 pointer-events-none flex items-center justify-center">
-                      <span className="bg-red-600 text-white font-black text-xl px-4 py-2 rounded-2xl rotate-[-10deg] shadow-xl border border-red-500/50">OUT OF STOCK</span>
+                      <span className="bg-red-600 text-white font-black text-xl px-4 py-2 rounded-2xl rotate-[-10deg] shadow-xl border border-red-500/50">{t("OUT OF STOCK")}</span>
                     </div>
                   )}
-                  {item.popular && <div className="absolute top-0 right-0 bg-gradient-to-bl from-orange-500 to-red-500 text-white text-[10px] font-black uppercase tracking-wider py-1.5 px-3 rounded-bl-2xl shadow-md z-10 flex items-center gap-1"><Flame size={12} /> Bestseller</div>}
+                  {item.popular && <div className="absolute top-0 right-0 bg-gradient-to-bl from-orange-500 to-red-500 text-white text-[10px] font-black uppercase tracking-wider py-1.5 px-3 rounded-bl-2xl shadow-md z-10 flex items-center gap-1"><Flame size={12} /> {t("Bestseller")}</div>}
                   {item.image_url && <img src={`${API_BASE_URL}${item.image_url}`} alt={item.name} className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-500" />}
                   <div className="p-5 flex-1 flex flex-col bg-white dark:bg-zinc-900 relative z-10">
                     <h3 className="text-xl font-bold dark:text-white leading-tight mb-1">{item.name}</h3>
@@ -1384,7 +1419,7 @@ function PublicMenuCard({ toggleTheme, isDarkMode }) {
                 <div key={item.id} className={`group flex items-center bg-white dark:bg-zinc-900/80 backdrop-blur-lg border border-zinc-200/80 dark:border-zinc-800/80 rounded-[1.5rem] p-3 shadow-sm transition-all relative overflow-hidden ${item.in_stock === false ? 'opacity-60 grayscale' : 'hover:shadow-md'}`}>
                   {item.in_stock === false && (
                      <div className="absolute inset-0 bg-zinc-900/5 dark:bg-white/5 z-20 pointer-events-none flex items-center justify-center">
-                         <span className="bg-red-600/90 backdrop-blur-sm text-white font-black text-lg px-6 py-1 rounded-xl shadow-lg uppercase tracking-widest border border-red-500/50">Out of Stock</span>
+                         <span className="bg-red-600/90 backdrop-blur-sm text-white font-black text-lg px-6 py-1 rounded-xl shadow-lg uppercase tracking-widest border border-red-500/50">{t("OUT OF STOCK")}</span>
                      </div>
                   )}
                   {/* Bestseller Left Bar */}
@@ -1406,7 +1441,7 @@ function PublicMenuCard({ toggleTheme, isDarkMode }) {
                   <div className="flex-1 pr-2 relative z-10">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-base md:text-lg font-bold dark:text-white leading-tight">{item.name}</h3>
-                      {item.popular && <span className="bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md flex items-center gap-0.5"><Flame size={10}/> Hot</span>}
+                      {item.popular && <span className="bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md flex items-center gap-0.5"><Flame size={10}/> {t("Hot")}</span>}
                     </div>
                     {item.desc && <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-1">{item.desc}</p>}
                   </div>
@@ -1423,8 +1458,8 @@ function PublicMenuCard({ toggleTheme, isDarkMode }) {
         ) : (
            <div className="col-span-full py-12 text-center text-zinc-500 flex flex-col items-center">
              <div className="w-16 h-16 bg-white dark:bg-zinc-900 rounded-full flex items-center justify-center mb-3 shadow-sm"><Info size={24} className="text-zinc-400"/></div>
-             <h3 className="text-lg font-bold dark:text-white">No items found</h3>
-             <p className="text-sm">Try searching for something else.</p>
+             <h3 className="text-lg font-bold dark:text-white">{t("No items found")}</h3>
+             <p className="text-sm">{t("Try searching for something else.")}</p>
            </div>
         )}
 

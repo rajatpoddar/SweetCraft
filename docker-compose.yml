@@ -7,12 +7,13 @@ services:
       - "5534:5000"
     volumes:
       - ./instance:/app/instance # SQLite data safe rakhne ke liye
+      - ./static/uploads:/app/static/uploads # NAYA: Uploaded images hamesha safe rahenge
     restart: always
 
   frontend:
     build: ./frontend
     ports:
-      - "8834:80" # NAS par port 8080 par access hoga
+      - "8834:80" 
     depends_on:
       - backend
     restart: always

@@ -84,10 +84,10 @@ function AdminLayout({ logout, toggleTheme, isDarkMode }) {
           <NavItem to="/orders" icon={<ShoppingBag size={20} />} label={t("Party Orders")} />
           <NavItem to="/staff" icon={<Users size={20} />} label={t("Staff Khata")} />
           <NavItem to="/debt" icon={<IndianRupee size={20} />} label={t("Market Udhari")} />
-          <NavItem to="/reports" icon={<History size={20} />} label={t("All Reports")} />
-          <NavItem to="/menu-manager" icon={<Store size={20} />} label={t("Menu Manager")} />
           <NavItem to="/expenses" icon={<ReceiptText size={20} />} label={t("Daily Expenses")} />
+          <NavItem to="/menu-manager" icon={<Store size={20} />} label={t("Menu Manager")} />
           <NavItem to="/mahajan" icon={<Briefcase size={20} />} label={t("Mahajan Manager")} />
+          <NavItem to="/reports" icon={<History size={20} />} label={t("All Reports")} />
         </nav>
         <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 space-y-4">
           <div className="flex items-center justify-between">
@@ -213,11 +213,32 @@ export function UI_Button({ children, onClick, variant = "primary", className = 
 
 // --- LOGIN SCREEN ---
 function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      if (res.ok) {
+        onLogin();
+      } else {
+        setError('Galat Username ya Password!');
+      }
+    } catch (err) {
+      setError('Network connection error.');
+    }
+  };
+
   return (
     <div className={`min-h-screen flex items-center justify-center p-4 bg-zinc-50 dark:bg-zinc-950 font-sans ${isDarkMode ? 'dark' : ''} transition-colors duration-500 relative overflow-hidden`}>
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-500/20 dark:bg-purple-600/20 rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-indigo-500/20 dark:bg-indigo-600/20 rounded-full blur-3xl"></div>
-
+      
       <div className="w-full max-w-md bg-white/70 dark:bg-zinc-900/70 backdrop-blur-2xl rounded-[3rem] p-10 shadow-2xl border border-white/20 dark:border-zinc-800/50 relative z-10">
         <button onClick={toggleTheme} className="absolute top-6 right-6 p-2 rounded-full bg-white/50 dark:bg-zinc-800/50 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all shadow-sm">
           {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
@@ -227,13 +248,13 @@ function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
             <Droplets className="text-white" size={40} />
           </div>
         </div>
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight mb-2">Welcome Back</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 font-medium">SweetCraft Manager Pro</p>
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight mb-2">Secure Login</h1>
+          {error && <p className="text-red-500 font-bold mt-2">{error}</p>}
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); onLogin(); }} className="space-y-4">
-          <UI_Input placeholder="Username" required />
-          <UI_Input type="password" placeholder="Password" required />
+        <form onSubmit={handleLogin} className="space-y-4">
+          <UI_Input placeholder="Username (admin)" value={username} onChange={e=>setUsername(e.target.value)} required />
+          <UI_Input type="password" placeholder="Password (admin123)" value={password} onChange={e=>setPassword(e.target.value)} required />
           <div className="pt-4">
             <UI_Button type="submit" variant="primary"><span>Secure Login</span> <ChevronRight size={20} /></UI_Button>
           </div>
@@ -245,51 +266,101 @@ function LoginScreen({ onLogin, isDarkMode, toggleTheme }) {
 
 // --- DASHBOARD PAGE ---
 function Dashboard() {
-  const { t } = useTranslation(); // 👈 NAYA HOOK ADD KIYA
+  const { t } = useTranslation(); 
   const [alerts, setAlerts] = useState({ expiring_items: [], upcoming_orders: [], low_stock_items: [] });
-  const [staffList, setStaffList] = useState([]);
-  const [metrics, setMetrics] = useState({ totalUdhari: 0, totalPendingOrders: 0, totalPresentStaff: 0 });
+  const [stats, setStats] = useState({ total_income: 0, total_cash: 0, total_online: 0, total_expense: 0, total_staff_pay: 0, net_income: 0 });
+  const [incomeForm, setIncomeForm] = useState({ payment_mode: 'Cash', amount: '', description: '' });
+  
+  // NAYA: Purane metrics wapas laane ke liye state
+  const [oldMetrics, setOldMetrics] = useState({ totalUdhari: 0, totalPendingOrders: 0, totalPresentStaff: 0, totalStaff: 0 });
 
+  const fetchStats = () => fetch(API_BASE_URL + '/api/dashboard/stats').then(res => res.json()).then(setStats).catch(()=>{});
+  
   useEffect(() => {
     fetch(API_BASE_URL + '/api/dashboard/alerts').then(res => res.json()).then(data => { if (data) setAlerts(data); }).catch(() => { });
+    fetchStats();
+    
+    // NAYA: Purane API calls metrics ke liye
     fetch(API_BASE_URL + '/api/staff').then(res => res.json()).then(data => {
-      setStaffList(data); setMetrics(prev => ({ ...prev, totalPresentStaff: data.filter(s => s.today_attendance === 'Present').length }));
+      setOldMetrics(prev => ({ ...prev, totalPresentStaff: data.filter(s => s.today_attendance === 'Present').length, totalStaff: data.length }));
     }).catch(() => { });
-    fetch(API_BASE_URL + '/api/customers').then(res => res.json()).then(data => setMetrics(prev => ({ ...prev, totalUdhari: data.reduce((sum, c) => sum + c.balance, 0) }))).catch(() => { });
-    fetch(API_BASE_URL + '/api/orders').then(res => res.json()).then(data => setMetrics(prev => ({ ...prev, totalPendingOrders: data.filter(o => o.status !== 'Delivered').length }))).catch(() => { });
+    fetch(API_BASE_URL + '/api/customers').then(res => res.json()).then(data => setOldMetrics(prev => ({ ...prev, totalUdhari: data.reduce((sum, c) => sum + c.balance, 0) }))).catch(() => { });
+    fetch(API_BASE_URL + '/api/orders').then(res => res.json()).then(data => setOldMetrics(prev => ({ ...prev, totalPendingOrders: data.filter(o => o.status !== 'Delivered').length }))).catch(() => { });
   }, []);
+
+  const handleIncomeSubmit = (e) => {
+    e.preventDefault();
+    fetch(API_BASE_URL + '/api/income', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(incomeForm) })
+      .then(() => { setIncomeForm({ payment_mode: 'Cash', amount: '', description: '' }); fetchStats(); });
+  };
 
   const getExpiryText = (dateStr) => {
     const diffDays = Math.ceil((new Date(dateStr) - new Date().setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24));
-    if (diffDays <= 0) return `Expired`;
-    return `Expires in ${diffDays}d`;
+    return diffDays <= 0 ? `Expired` : `Expires in ${diffDays}d`;
   };
 
   return (
-    <div className="animate-fade-in space-y-8">
+    <div className="animate-fade-in space-y-6">
       <div className="pt-2">
         <h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">{t("Overview")}</h1>
         <p className="text-zinc-500 dark:text-zinc-400 mt-2 font-medium text-lg">{t("Welcome back, here's your daily summary.")}</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-        <MetricCard title={t("Staff Present")} value={metrics.totalPresentStaff} sub={`/ ${staffList.length}`} icon={<Users size={28} />} gradient="from-emerald-400 to-teal-500" />
-        <MetricCard title={t("Market Udhari")} value={`₹${metrics.totalUdhari}`} icon={<IndianRupee size={28} />} gradient="from-orange-400 to-rose-500" />
-        <MetricCard title={t("Pending Orders")} value={metrics.totalPendingOrders} icon={<ShoppingBag size={28} />} gradient="from-indigo-400 to-purple-500" />
+      {/* Main Income Stats */}
+      <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-6 md:p-8 rounded-[2rem] text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="flex-1">
+              <p className="text-emerald-50 font-bold tracking-widest mb-2 uppercase text-[10px]">Net Daily Income (In - Out)</p>
+              <h3 className="text-5xl md:text-6xl font-black tracking-tight leading-none mb-3">₹{stats.net_income}</h3>
+              <div className="flex flex-wrap gap-3 text-xs font-bold">
+                 <span className="bg-white/20 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-white/10">🟢 In: ₹{stats.total_income}</span>
+                 <span className="bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-black/5">🔴 Out: ₹{stats.total_expense + stats.total_staff_pay}</span>
+              </div>
+          </div>
+          
+          <form onSubmit={handleIncomeSubmit} className="bg-white/10 p-5 rounded-[1.5rem] border border-white/20 w-full md:w-[320px] backdrop-blur-md flex flex-col gap-3 flex-shrink-0">
+             <h4 className="font-bold text-[11px] uppercase tracking-widest text-emerald-50 mb-1">Record Direct Income</h4>
+             <div className="grid grid-cols-2 gap-2">
+               <select className="bg-white/20 text-white rounded-xl px-3 py-2 text-sm outline-none border border-white/10" value={incomeForm.payment_mode} onChange={e=>setIncomeForm({...incomeForm, payment_mode: e.target.value})}>
+                 <option value="Cash" className="text-black">Cash</option>
+                 <option value="Online" className="text-black">Online</option>
+               </select>
+               <input type="number" placeholder="₹ Amount" value={incomeForm.amount} onChange={e=>setIncomeForm({...incomeForm, amount: e.target.value})} className="bg-white/20 text-white placeholder-white/60 text-sm rounded-xl px-3 py-2 outline-none border border-white/10" required />
+             </div>
+             <div className="flex gap-2">
+               <input type="text" placeholder="Detail (Optional)" value={incomeForm.description} onChange={e=>setIncomeForm({...incomeForm, description: e.target.value})} className="bg-white/20 text-white placeholder-white/60 text-sm rounded-xl px-3 py-2 w-full outline-none border border-white/10" />
+               <button type="submit" className="bg-white text-emerald-600 font-bold w-12 rounded-xl flex items-center justify-center hover:scale-105 transition-transform active:scale-95">+</button>
+             </div>
+          </form>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Row 1: Finance Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <MetricCard title="Total Daily Income" value={`₹${stats.total_income}`} sub={`C: ₹${stats.total_cash} | O: ₹${stats.total_online}`} icon={<IndianRupee size={24} />} gradient="from-purple-400 to-indigo-500" />
+        <MetricCard title="Total Daily Expense" value={`₹${stats.total_expense}`} icon={<ReceiptText size={24} />} gradient="from-red-400 to-rose-600" />
+        <MetricCard title="Staff Pay (Today)" value={`₹${stats.total_staff_pay}`} icon={<Users size={24} />} gradient="from-orange-400 to-rose-500" />
+      </div>
+
+      {/* Row 2: Operation Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <MetricCard title="Market Udhari" value={`₹${oldMetrics.totalUdhari}`} icon={<IndianRupee size={24} />} gradient="from-pink-400 to-rose-500" />
+        <MetricCard title="Pending Orders" value={oldMetrics.totalPendingOrders} icon={<ShoppingBag size={24} />} gradient="from-blue-400 to-indigo-500" />
+        <MetricCard title="Staff Present" value={oldMetrics.totalPresentStaff} sub={`/ ${oldMetrics.totalStaff} Total Staff`} icon={<Users size={24} />} gradient="from-emerald-400 to-teal-500" />
+        <MetricCard title="Active Alerts" value={(alerts.expiring_items?.length || 0) + (alerts.low_stock_items?.length || 0)} icon={<AlertTriangle size={24} />} gradient="from-amber-400 to-orange-500" />
+      </div>
+
+      {/* Alerts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
         {alerts.expiring_items?.length > 0 && (
-          <div className="bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 p-6 md:p-8 rounded-[2.5rem]">
+          <div className="bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 p-6 md:p-8 rounded-[2rem]">
             <h2 className="text-xl font-extrabold text-red-700 dark:text-red-400 flex items-center mb-6"><AlertTriangle className="mr-2" size={24} /> {t("Expiring Stock")}</h2>
             <div className="space-y-3">
               {alerts.expiring_items.map(item => (
-                <div key={item.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
+                <div key={item.id} className="bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
                   <div>
                     <p className="font-bold text-zinc-900 dark:text-zinc-100">{item.item_name}</p>
-                    <p className="text-sm text-zinc-500">Stock: {item.quantity}</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">Stock: {item.quantity}</p>
                   </div>
-                  <span className="bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-400 text-xs px-3 py-1.5 rounded-xl font-bold">{getExpiryText(item.expiry_date)}</span>
+                  <span className="bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-400 text-xs px-3 py-1.5 rounded-lg font-bold">{getExpiryText(item.expiry_date)}</span>
                 </div>
               ))}
             </div>
@@ -297,13 +368,13 @@ function Dashboard() {
         )}
 
         {alerts.upcoming_orders?.length > 0 && (
-          <div className="bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/30 p-6 md:p-8 rounded-[2.5rem]">
+          <div className="bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/30 p-6 md:p-8 rounded-[2rem]">
             <h2 className="text-xl font-extrabold text-purple-700 dark:text-purple-400 flex items-center mb-6"><Clock className="mr-2" size={24} /> {t("Upcoming Orders")}</h2>
             <div className="space-y-3">
               {alerts.upcoming_orders.map(order => (
-                <div key={order.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
-                  <p className="font-bold text-zinc-900 dark:text-zinc-100 text-lg">{order.customer_name}</p>
-                  <span className="bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-400 text-xs px-3 py-1.5 rounded-xl font-bold tracking-wide">Del: {order.delivery_date}</span>
+                <div key={order.id} className="bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
+                  <p className="font-bold text-zinc-900 dark:text-zinc-100 text-base">{order.customer_name}</p>
+                  <span className="bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-400 text-xs px-3 py-1.5 rounded-lg font-bold tracking-wide">Del: {order.delivery_date}</span>
                 </div>
               ))}
             </div>
@@ -311,16 +382,16 @@ function Dashboard() {
         )}
 
         {alerts.low_stock_items?.length > 0 && (
-          <div className="bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 p-6 md:p-8 rounded-[2.5rem] lg:col-span-2">
+          <div className="bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 p-6 md:p-8 rounded-[2rem] lg:col-span-2">
             <h2 className="text-xl font-extrabold text-orange-700 dark:text-orange-400 flex items-center mb-6"><AlertTriangle className="mr-2" size={24} /> {t("Low Stock Alerts")}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {alerts.low_stock_items.map(item => (
-                <div key={'low'+item.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
+                <div key={'low'+item.id} className="bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm flex justify-between items-center border border-zinc-100 dark:border-zinc-800">
                   <div>
                     <p className="font-bold text-zinc-900 dark:text-zinc-100">{item.item_name}</p>
-                    <p className="text-sm text-zinc-500 font-medium tracking-wide">Stock Left: {item.quantity} (Limit: {item.min_stock})</p>
+                    <p className="text-xs text-zinc-500 font-medium tracking-wide mt-0.5">Stock Left: {item.quantity} (Limit: {item.min_stock})</p>
                   </div>
-                  <span className="bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-400 text-xs px-3 py-1.5 rounded-xl font-bold">Low Stock</span>
+                  <span className="bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-400 text-xs px-3 py-1.5 rounded-lg font-bold">Low Stock</span>
                 </div>
               ))}
             </div>
@@ -333,16 +404,16 @@ function Dashboard() {
 
 function MetricCard({ title, value, sub, icon, gradient }) {
   return (
-    <div className="bg-white dark:bg-zinc-900 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-zinc-100 dark:border-zinc-800 relative overflow-hidden group">
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="text-zinc-500 dark:text-zinc-400 font-bold tracking-wide mb-2 ml-1 uppercase text-xs">{title}</p>
-          <div className="flex items-baseline gap-2">
-            <h3 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-white tracking-tight">{value}</h3>
-            {sub && <span className="text-zinc-400 font-bold">{sub}</span>}
-          </div>
+    <div className="bg-white dark:bg-zinc-900 p-5 md:p-6 rounded-[1.5rem] shadow-sm border border-zinc-100 dark:border-zinc-800 relative overflow-hidden group">
+      <div className="flex justify-between items-start gap-3">
+        {/* min-w-0 ensures that long text truncates properly instead of pushing layout */}
+        <div className="flex-1 min-w-0"> 
+          <p className="text-zinc-500 dark:text-zinc-400 font-bold tracking-wider mb-2 uppercase text-[10px] truncate">{title}</p>
+          <h3 className="text-3xl md:text-4xl font-black text-zinc-900 dark:text-white tracking-tight truncate leading-none mb-1.5">{value}</h3>
+          {/* Sub text ko neeche move kar diya aur truncate lagaya taki overflow na ho */}
+          {sub && <p className="text-zinc-400 dark:text-zinc-500 font-semibold text-[11px] truncate">{sub}</p>}
         </div>
-        <div className={`w-14 h-14 md:w-16 md:h-16 rounded-[1.5rem] bg-gradient-to-br ${gradient} flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+        <div className={`w-12 h-12 flex-shrink-0 rounded-[1rem] bg-gradient-to-br ${gradient} flex items-center justify-center text-white shadow-md group-hover:scale-110 transition-transform duration-300`}>
           {icon}
         </div>
       </div>
@@ -554,6 +625,17 @@ function StaffPage() {
       .catch(() => {});
   };
 
+  // NAYA: Staff Delete karne ka function
+  const handleDeleteStaff = async (id, name) => {
+    if (!window.confirm(`Kya aap sach me '${name}' ka poora khata hamesha ke liye delete karna chahte hain? Iska saara hisaab aur attendance mit jayega.`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/staff/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchStaff();
+    } catch (error) {
+      alert("Delete fail ho gaya. Network check karein.");
+    }
+  };
+
   // Search Filter
   const filteredStaff = staffList.filter(staff => 
     staff.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -594,14 +676,21 @@ function StaffPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredStaff.map(staff => (
-          <div key={staff.id} className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2rem] p-6 flex flex-col justify-between shadow-sm">
+          <div key={staff.id} className="group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2rem] p-6 flex flex-col justify-between shadow-sm">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">{staff.name}</h3>
                 {staff.mobile && <a href={`tel:${staff.mobile}`} className="text-blue-500 font-medium mt-1 inline-flex items-center gap-1 hover:underline"><UserPen size={14}/> {staff.mobile}</a>}
                 <p className="text-zinc-500 font-medium mt-1">₹{staff.base_salary} <span className="text-xs">/{staff.payment_type === 'Daily' ? 'day' : 'mo'}</span></p>
               </div>
-              <div className={`px-3 py-1.5 rounded-xl font-bold text-sm ${staff.balance < 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>₹{staff.balance.toFixed(0)}</div>
+              
+              {/* BALANCE & DELETE BUTTON */}
+              <div className="flex flex-col items-end gap-2">
+                 <div className={`px-3 py-1.5 rounded-xl font-bold text-sm ${staff.balance < 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>₹{staff.balance.toFixed(0)}</div>
+                 <button onClick={() => handleDeleteStaff(staff.id, staff.name)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full hover:scale-110 transition-transform opacity-100 md:opacity-0 md:group-hover:opacity-100" title="Delete Staff">
+                    <Trash2 size={16} />
+                 </button>
+              </div>
             </div>
 
             <div className="space-y-3 mt-2">
@@ -1252,33 +1341,51 @@ function DebtPage() {
 
 // --- REPORTS PAGE ---
 function ReportsPage() {
-  const [reports, setReports] = useState({ inventory: [], returns: [], staff: [], customers: [] });
-  const [activeTab, setActiveTab] = useState('inventory');
+  const [reports, setReports] = useState({ inventory: [], returns: [], staff: [], customers: [], incomes: [], expenses: [] });
+  const [activeTab, setActiveTab] = useState('incomes');
+  
+  // NAYA: Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10;
 
   useEffect(() => { fetch(API_BASE_URL + '/api/reports').then(res => res.json()).then(setReports).catch(() => { }); }, []);
 
+  const handleTabChange = (id) => {
+    setActiveTab(id);
+    setCurrentPage(1); // Tab change karne pe page 1 par wapas aao
+  };
+
   const TabButton = ({ id, label }) => (
-    <button onClick={() => setActiveTab(id)} className={`flex-1 py-3 px-4 font-bold text-sm transition-all border-b-2 ${activeTab === id ? 'border-purple-600 text-purple-600 dark:border-purple-400 dark:text-purple-400' : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
+    <button onClick={() => handleTabChange(id)} className={`flex-1 py-3 px-4 font-bold text-sm transition-all border-b-2 whitespace-nowrap ${activeTab === id ? 'border-purple-600 text-purple-600 dark:border-purple-400 dark:text-purple-400' : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
       {label}
     </button>
   );
 
+  // Pagination Logic
+  const currentData = reports[activeTab] || [];
+  const totalPages = Math.ceil(currentData.length / rowsPerPage);
+  const paginatedData = currentData.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="pt-2"><h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Reports</h1></div>
+      <div className="pt-2"><h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">All Reports</h1></div>
 
-      <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-6 shadow-sm border border-zinc-100 dark:border-zinc-800">
+      <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-6 shadow-sm border border-zinc-100 dark:border-zinc-800 flex flex-col min-h-[500px]">
         <div className="flex overflow-x-auto border-b border-zinc-200 dark:border-zinc-800 mb-6 scrollbar-hide">
+          <TabButton id="incomes" label="Daily Income" />
+          <TabButton id="expenses" label="Daily Expense" />
+          <TabButton id="staff" label="Staff Khata" />
+          <TabButton id="customers" label="Udhari Ledger" />
           <TabButton id="inventory" label="Inventory" />
           <TabButton id="returns" label="Returns" />
-          <TabButton id="staff" label="Staff" />
-          <TabButton id="customers" label="Customers" />
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto flex-1">
           <table className="w-full text-left">
             <thead>
               <tr className="text-zinc-500 border-b border-zinc-100 dark:border-zinc-800 text-sm">
+                {activeTab === 'incomes' && <><th className="pb-3 pl-4">Payment Mode</th><th className="pb-3">Details</th><th className="pb-3">Amount</th><th className="pb-3">Date</th></>}
+                {activeTab === 'expenses' && <><th className="pb-3 pl-4">Item/Detail</th><th className="pb-3">Mahajan/Status</th><th className="pb-3">Amount</th><th className="pb-3">Date</th></>}
                 {activeTab === 'inventory' && <><th className="pb-3 pl-4">Item</th><th className="pb-3">Action</th><th className="pb-3">Qty</th><th className="pb-3">Date</th></>}
                 {activeTab === 'returns' && <><th className="pb-3 pl-4">Item</th><th className="pb-3">Return Qty</th><th className="pb-3">Date</th></>}
                 {activeTab === 'staff' && <><th className="pb-3 pl-4">Staff Name</th><th className="pb-3">Details</th><th className="pb-3">Type</th><th className="pb-3">Amount</th><th className="pb-3">Date</th></>}
@@ -1286,9 +1393,11 @@ function ReportsPage() {
               </tr>
             </thead>
             <tbody>
-              {reports[activeTab].length === 0 && <tr><td colSpan="4" className="py-6 text-center text-zinc-500">No records found.</td></tr>}
-              {reports[activeTab].map(row => (
-                <tr key={row.id} className="border-b border-zinc-100 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-950/50">
+              {paginatedData.length === 0 && <tr><td colSpan="5" className="py-6 text-center text-zinc-500">No records found.</td></tr>}
+              {paginatedData.map((row, idx) => (
+                <tr key={idx} className="border-b border-zinc-100 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-950/50">
+                  {activeTab === 'incomes' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.payment_mode}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description || '-'}</td><td className="py-4 font-bold text-emerald-600">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
+                  {activeTab === 'expenses' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.mahajan ? `${row.mahajan} (${row.status})` : `Direct (${row.status})`}</td><td className="py-4 font-bold text-rose-600">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                   {activeTab === 'inventory' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${row.action === 'Add' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{row.action}</span></td><td className="py-4 font-medium dark:text-white">{row.quantity}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                   {activeTab === 'returns' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4 font-medium dark:text-white">{row.quantity}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                   {activeTab === 'staff' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.staff_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description}</td><td className="py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${row.txn_type === 'Advance' ? 'bg-red-100 text-red-700' : row.txn_type === 'Edit' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'}`}>{row.txn_type}</span></td><td className="py-4 font-bold dark:text-white">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
@@ -1298,6 +1407,27 @@ function ReportsPage() {
             </tbody>
           </table>
         </div>
+
+        {/* NAYA: Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+             <button 
+               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+               disabled={currentPage === 1}
+               className="px-4 py-2 rounded-xl text-sm font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 disabled:opacity-50 transition-all hover:bg-zinc-200"
+             >
+               Previous
+             </button>
+             <span className="text-sm font-semibold text-zinc-500">Page {currentPage} of {totalPages}</span>
+             <button 
+               onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+               disabled={currentPage === totalPages}
+               className="px-4 py-2 rounded-xl text-sm font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 disabled:opacity-50 transition-all hover:bg-zinc-200"
+             >
+               Next
+             </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1606,25 +1736,33 @@ function PublicMenuCard({ toggleTheme, isDarkMode }) {
 // --- EXPENSE PAGE ---
 function ExpensePage() {
   const [expenses, setExpenses] = useState({ items: [], total_today: 0 });
-  const [formData, setFormData] = useState({ item_name: '', amount: '' });
+  const [mahajans, setMahajans] = useState([]);
+  const [suggestions, setSuggestions] = useState([]); // Autocomplete list state
+  const [formData, setFormData] = useState({ item_name: '', quantity: '1', unit: 'kg', amount: '', mahajan_id: '', payment_status: 'Paid' });
 
   const fetchExpenses = () => fetch(API_BASE_URL + '/api/expenses').then(res => res.json()).then(setExpenses).catch(() => {});
-  useEffect(() => { fetchExpenses(); }, []);
+  const fetchSuggestions = () => fetch(API_BASE_URL + '/api/expenses/suggest').then(res => res.json()).then(setSuggestions).catch(() => {});
+  
+  useEffect(() => { 
+    fetchExpenses(); 
+    fetchSuggestions(); // Page load pe purane names fetch karega
+    fetch(API_BASE_URL + '/api/mahajans').then(res => res.json()).then(setMahajans).catch(()=>{});
+  }, []);
 
   const handleAddExpense = (e) => {
     e.preventDefault();
     fetch(API_BASE_URL + '/api/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) })
-      .then(() => { setFormData({ item_name: '', amount: '' }); fetchExpenses(); });
+      .then(() => { 
+         setFormData({ item_name: '', quantity: '1', unit: 'kg', amount: '', mahajan_id: '', payment_status: 'Paid' }); 
+         fetchExpenses(); 
+         fetchSuggestions(); // Entry ke baad suggestions list refresh karega
+      });
   };
 
   const handleDeleteExpense = async (id) => {
     if (!window.confirm("Kya aap sach me is expense ko delete karna chahte hain?")) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/expenses/${id}`, { method: 'DELETE' });
-      if (res.ok) fetchExpenses();
-    } catch (error) {
-      alert("Delete fail ho gaya.");
-    }
+    const res = await fetch(`${API_BASE_URL}/api/expenses/${id}`, { method: 'DELETE' });
+    if (res.ok) fetchExpenses();
   };
 
   return (
@@ -1641,25 +1779,65 @@ function ExpensePage() {
 
       <div className="bg-white dark:bg-zinc-900 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-zinc-100 dark:border-zinc-800">
         <h2 className="text-xl font-extrabold mb-6 dark:text-white">Add New Expense</h2>
-        <form onSubmit={handleAddExpense} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-end">
-          <UI_Input label="Expense Detail (e.g. Doodh, Sabji)" value={formData.item_name} onChange={e => setFormData({ ...formData, item_name: e.target.value })} required />
-          <UI_Input label="Amount (₹)" type="number" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} required />
-          <UI_Button type="submit" variant="secondary">Note Expense</UI_Button>
+        
+        <form onSubmit={handleAddExpense} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
+          
+          <div className="lg:col-span-2">
+             <UI_Input label="Expense Detail (Saman)" list="expense-suggestions" value={formData.item_name} onChange={e => setFormData({ ...formData, item_name: e.target.value })} required />
+             {/* Autocomplete Datalist */}
+             <datalist id="expense-suggestions">
+                {suggestions.map((s, idx) => <option key={idx} value={s} />)}
+             </datalist>
+          </div>
+
+          <div className="flex gap-3 w-full">
+              <div className="flex-1"><UI_Input label="Qty" type="number" step="0.01" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} required /></div>
+              <div className="flex-1">
+                 <UI_Select label="Unit" options={[
+                    {label:'kg', value:'kg'}, 
+                    {label:'ltr', value:'ltr'}, 
+                    {label:'pc', value:'pc'}, 
+                    {label:'pkt', value:'pkt'}, 
+                    {label:'gm', value:'gm'}
+                 ]} value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} />
+              </div>
+          </div>
+          
+          <UI_Input label="Total Amount (₹)" type="number" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} required />
+          
+          <div className="lg:col-span-2">
+             <UI_Select label="Mahajan/Vendor (Optional)" options={[{label:'No Mahajan (Direct)', value:''}].concat(mahajans.map(m => ({label: m.name, value: m.id})))} value={formData.mahajan_id} onChange={e => setFormData({ ...formData, mahajan_id: e.target.value })} />
+          </div>
+          
+          <UI_Select label="Payment Status" options={[{label:'Paid Instantly', value:'Paid'}, {label:'Udhari (Credit)', value:'Credit'}]} value={formData.payment_status} onChange={e => setFormData({ ...formData, payment_status: e.target.value })} disabled={!formData.mahajan_id} />
+          
+          <UI_Button type="submit" variant="secondary" className="h-[50px]">Note Expense</UI_Button>
         </form>
       </div>
 
-      <h2 className="text-2xl font-black text-zinc-900 dark:text-white mt-8 mb-4">Today's Activity</h2>
+      <h2 className="text-2xl font-black text-zinc-900 dark:text-white mt-8 mb-4">Today's Expense Log</h2>
       <div className="space-y-3">
          {expenses.items.length === 0 && <p className="text-zinc-500">Koi kharcha entry nahi hai aaj ka.</p>}
          {expenses.items.map(e => (
             <div key={e.id} className="bg-white dark:bg-zinc-900 p-4 rounded-[1.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex justify-between items-center group">
                 <div>
-                   <h3 className="font-bold dark:text-white">{e.item_name}</h3>
-                   <p className="text-xs text-zinc-500 font-medium">{e.date}</p>
+                   <div className="flex items-center gap-2 mb-1">
+                      {/* Name ke sath Quantity aur Unit show hoga */}
+                      <h3 className="font-bold text-lg dark:text-white">{e.item_name} <span className="text-sm text-zinc-500 font-medium">({e.quantity} {e.unit})</span></h3>
+                      {e.status === 'Credit' ? (
+                          <span className="bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wide">Udhar</span>
+                      ) : (
+                          <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wide">Paid</span>
+                      )}
+                   </div>
+                   <p className="text-xs text-zinc-500 font-medium">
+                      {e.date} 
+                      {e.mahajan && <span className="ml-2 font-bold text-zinc-700 dark:text-zinc-300">• Vendor: {e.mahajan}</span>}
+                   </p>
                 </div>
                 <div className="flex items-center gap-4">
-                   <div className="text-rose-600 dark:text-rose-400 font-black text-lg">- ₹{e.amount}</div>
-                   <button onClick={() => handleDeleteExpense(e.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full hover:scale-110 transition-transform opacity-100 md:opacity-0 md:group-hover:opacity-100" title="Delete Expense">
+                   <div className="text-rose-600 dark:text-rose-400 font-black text-xl">- ₹{e.amount}</div>
+                   <button onClick={() => handleDeleteExpense(e.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg hover:scale-105 transition-transform opacity-100 md:opacity-0 md:group-hover:opacity-100">
                      <Trash2 size={16} />
                    </button>
                 </div>
@@ -1672,15 +1850,54 @@ function ExpensePage() {
 
 // --- MAHAJAN MANAGER PAGE ---
 function MahajanPage() {
+  const [mahajans, setMahajans] = useState([]);
+  const [formData, setFormData] = useState({ name: '', phone: '' });
+
+  const fetchMahajans = () => fetch(API_BASE_URL + '/api/mahajans').then(res => res.json()).then(setMahajans).catch(()=>{});
+  useEffect(() => { fetchMahajans(); }, []);
+
+  const handleAddMahajan = (e) => {
+    e.preventDefault();
+    fetch(API_BASE_URL + '/api/mahajans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) })
+      .then(() => { setFormData({ name: '', phone: '' }); fetchMahajans(); });
+  };
+
+  const handlePayMahajan = async (id, name, balance) => {
+    const amount = prompt(`'${name}' ko kitna payment clear karna hai? (Current Due: ₹${balance})`);
+    if(!amount || isNaN(amount) || amount <= 0) return;
+    
+    await fetch(`${API_BASE_URL}/api/mahajans/${id}/pay`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: Number(amount) }) });
+    fetchMahajans();
+  };
+
   return (
-    <div className="animate-fade-in flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-      <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-xl shadow-purple-500/20">
-         <Briefcase size={40} className="text-white" />
+    <div className="animate-fade-in space-y-6">
+      <div className="pt-2"><h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Mahajan Ledger</h1></div>
+
+      <div className="bg-white dark:bg-zinc-900 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-zinc-100 dark:border-zinc-800">
+        <h2 className="text-xl font-extrabold mb-6 dark:text-white">Add New Mahajan / Vendor</h2>
+        <form onSubmit={handleAddMahajan} className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+          <UI_Input label="Vendor Name" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+          <UI_Input label="Phone" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
+          <UI_Button type="submit" variant="secondary">Add Vendor</UI_Button>
+        </form>
       </div>
-      <h1 className="text-4xl md:text-5xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight mb-4">Mahajan Manager</h1>
-      <p className="text-lg text-zinc-500 dark:text-zinc-400 font-medium max-w-md">Business bulk suppliers aur Mahajano ke ledger manage karne ka feature abhi under development hai.</p>
-      <div className="mt-8 px-6 py-3 bg-zinc-100 dark:bg-zinc-800/50 rounded-full border border-zinc-200 dark:border-zinc-700">
-         <span className="font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest text-sm">Coming Soon 🚀</span>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+        {mahajans.map(m => (
+          <div key={m.id} className="bg-white dark:bg-zinc-900 rounded-[2rem] p-6 border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
+            <div>
+              <h3 className="font-bold text-2xl dark:text-white mb-1">{m.name}</h3>
+              <p className="text-sm text-zinc-500 font-medium mb-4">📞 {m.phone || 'N/A'}</p>
+              
+              <div className="bg-red-50 dark:bg-red-950/50 p-4 rounded-2xl mb-6 flex justify-between items-center border border-red-100 dark:border-red-900/30">
+                <span className="text-red-600 dark:text-red-400 font-bold">Total Dues to Pay</span>
+                <span className="font-black text-red-600 dark:text-red-400 text-lg">₹{m.balance}</span>
+              </div>
+            </div>
+            <UI_Button onClick={() => handlePayMahajan(m.id, m.name, m.balance)} variant="success" className="!py-3">Pay Vendor</UI_Button>
+          </div>
+        ))}
       </div>
     </div>
   );

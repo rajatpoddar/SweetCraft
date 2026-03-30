@@ -4,6 +4,7 @@ from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime, timedelta
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 CORS(app)
@@ -85,8 +86,12 @@ class Customer(db.Model):
 class DailyExpense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     item_name = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Float, default=1.0)  # NAYA: Qty column
+    unit = db.Column(db.String(20), default='kg') # NAYA: Unit column
     amount = db.Column(db.Float, nullable=False)
     date_time = db.Column(db.DateTime, default=datetime.now)
+    mahajan_id = db.Column(db.Integer, db.ForeignKey('mahajan.id'), nullable=True)
+    payment_status = db.Column(db.String(20), default='Paid')
 
 # IN DONO TABLES KO REPLACE KARO
 class CustomerLedger(db.Model):
@@ -108,13 +113,52 @@ class MenuItem(db.Model):
     popular = db.Column(db.Boolean, default=False)
     in_stock = db.Column(db.Boolean, default=True) # Naya field In-Stock switch ke liye
 
+class Admin(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+
+class Mahajan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(15))
+    balance = db.Column(db.Float, default=0.0)
+
+class MahajanLedger(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    mahajan_id = db.Column(db.Integer, db.ForeignKey('mahajan.id'), nullable=False)
+    date_time = db.Column(db.DateTime, default=datetime.now)
+    txn_type = db.Column(db.String(50), nullable=False) # 'Udhar', 'Payment'
+    amount = db.Column(db.Float, nullable=False)
+    description = db.Column(db.String(255))
+
+class DailyIncome(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    payment_mode = db.Column(db.String(20), nullable=False) # 'Cash', 'Online'
+    amount = db.Column(db.Float, nullable=False)
+    description = db.Column(db.String(255))
+    date_time = db.Column(db.DateTime, default=datetime.now)
+
 with app.app_context():
     db.create_all()
-    # Enable WAL mode for 10x faster saving and no lock errors
+    # Default admin account banayenge agar nahi hai (Username: admin, Password: admin123)
+    if not Admin.query.filter_by(username='admin').first():
+        hashed_pw = generate_password_hash('admin123')
+        db.session.add(Admin(username='admin', password_hash=hashed_pw))
+    
     db.session.execute(db.text('PRAGMA journal_mode=WAL;'))
     db.session.commit()
 
 # --- ROUTES ---
+
+# --- SECURE LOGIN ---
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.json
+    admin = Admin.query.filter_by(username=data.get('username')).first()
+    if admin and check_password_hash(admin.password_hash, data.get('password')):
+        return jsonify({"message": "Login successful", "token": "sweetcraft_secure_token"}), 200
+    return jsonify({"error": "Invalid credentials"}), 401
 
 # 1. Dashboard Alerts Update
 @app.route('/api/dashboard/alerts', methods=['GET'])
@@ -312,6 +356,19 @@ def staff_advance_clear(id):
     db.session.commit()
     return jsonify({"message": "Account updated!", "balance": staff.balance})
 
+# NAYA ROUTE: Staff ko permanently delete karne ke liye
+@app.route('/api/staff/<int:id>', methods=['DELETE'])
+def delete_staff(id):
+    staff = Staff.query.get_or_404(id)
+    # Pehle staff ka attendance aur ledger history delete karenge taki database me Foreign Key error na aaye
+    Attendance.query.filter_by(staff_id=id).delete()
+    Ledger.query.filter_by(staff_id=id).delete()
+    
+    # Phir staff ki profile delete karenge
+    db.session.delete(staff)
+    db.session.commit()
+    return jsonify({"message": f"Staff {staff.name} aur unka poora record delete ho gaya!"})
+
 @app.route('/api/orders', methods=['GET', 'POST'])
 def manage_orders():
     if request.method == 'POST':
@@ -440,11 +497,17 @@ def get_all_reports():
     staff_logs_q = db.session.query(Ledger, Staff.name).join(Staff, Ledger.staff_id == Staff.id).order_by(Ledger.date_time.desc()).limit(200).all()
     cust_logs_q = db.session.query(CustomerLedger, Customer.name).join(Customer, CustomerLedger.customer_id == Customer.id).order_by(CustomerLedger.date_time.desc()).limit(200).all()
     
+    # NAYA: Income aur Expense bhi add kar diya
+    income_logs = DailyIncome.query.order_by(DailyIncome.date_time.desc()).limit(200).all()
+    expense_logs = db.session.query(DailyExpense, Mahajan.name).outerjoin(Mahajan, DailyExpense.mahajan_id == Mahajan.id).order_by(DailyExpense.date_time.desc()).limit(200).all()
+    
     reports = {
         "inventory": [{"id": i.id, "item_name": i.item_name, "action": i.action, "quantity": i.quantity, "date": i.date_time.strftime('%Y-%m-%d %I:%M %p')} for i in inv_logs],
         "returns": [{"id": r.id, "item_name": r.item_name, "quantity": r.quantity, "date": r.return_date.strftime('%Y-%m-%d %I:%M %p')} for r in ret_items],
         "staff": [{"id": l[0].id, "staff_id": l[0].staff_id, "staff_name": l[1], "txn_type": l[0].txn_type, "amount": l[0].amount, "description": l[0].description, "date": l[0].date_time.strftime('%Y-%m-%d %I:%M %p')} for l in staff_logs_q],
-        "customers": [{"id": c[0].id, "customer_id": c[0].customer_id, "customer_name": c[1], "txn_type": c[0].txn_type, "amount": c[0].amount, "date": c[0].date_time.strftime('%Y-%m-%d %I:%M %p')} for c in cust_logs_q]
+        "customers": [{"id": c[0].id, "customer_id": c[0].customer_id, "customer_name": c[1], "txn_type": c[0].txn_type, "amount": c[0].amount, "date": c[0].date_time.strftime('%Y-%m-%d %I:%M %p')} for c in cust_logs_q],
+        "incomes": [{"id": i.id, "payment_mode": i.payment_mode, "amount": i.amount, "description": i.description, "date": i.date_time.strftime('%Y-%m-%d %I:%M %p')} for i in income_logs],
+        "expenses": [{"id": e[0].id, "item_name": e[0].item_name, "amount": e[0].amount, "mahajan": e[1], "status": e[0].payment_status, "date": e[0].date_time.strftime('%Y-%m-%d %I:%M %p')} for e in expense_logs]
     }
     return jsonify(reports)
 
@@ -504,24 +567,42 @@ def update_menu_item(id):
         db.session.commit()
         return jsonify({"message": "Menu item updated!"})
 
-# NEW ROUTES: Expenses aur Staff Pay ke liye
+# NAYA ROUTE: Autocomplete suggestions ke liye
+@app.route('/api/expenses/suggest', methods=['GET'])
+def expense_suggestions():
+    # Database se distinct (unique) item names nikalenge
+    items = db.session.query(DailyExpense.item_name).distinct().all()
+    return jsonify([i[0] for i in items])
+
 @app.route('/api/expenses', methods=['GET', 'POST'])
 def manage_expenses():
     if request.method == 'POST':
         data = request.json
-        new_exp = DailyExpense(item_name=data['item_name'], amount=float(data['amount']))
+        mahajan_id = data.get('mahajan_id')
+        payment_status = data.get('payment_status', 'Paid')
+        amount = float(data['amount'])
+        qty = float(data.get('quantity', 1.0))
+        unit = data.get('unit', 'kg')
+        
+        new_exp = DailyExpense(item_name=data['item_name'], quantity=qty, unit=unit, amount=amount, mahajan_id=mahajan_id, payment_status=payment_status)
         db.session.add(new_exp)
+        
+        if mahajan_id and payment_status == 'Credit':
+            mahajan = Mahajan.query.get(mahajan_id)
+            if mahajan:
+                mahajan.balance += amount
+                db.session.add(MahajanLedger(mahajan_id=mahajan.id, txn_type='Udhar', amount=amount, description=f"{data['item_name']} ({qty} {unit})"))
+                
         db.session.commit()
         return jsonify({"message": "Expense added!"}), 201
     
     today = datetime.today().date()
-    expenses = DailyExpense.query.filter(db.func.date(DailyExpense.date_time) == today).all()
-    total = sum(e.amount for e in expenses)
+    expenses = db.session.query(DailyExpense, Mahajan.name).outerjoin(Mahajan, DailyExpense.mahajan_id == Mahajan.id).filter(db.func.date(DailyExpense.date_time) == today).all()
+    total = sum(e[0].amount for e in expenses)
     return jsonify({
         "total_today": total,
-        "items": [{"id": e.id, "item_name": e.item_name, "amount": e.amount, "date": e.date_time.strftime('%I:%M %p')} for e in expenses]
+        "items": [{"id": e[0].id, "item_name": e[0].item_name, "quantity": e[0].quantity, "unit": e[0].unit, "amount": e[0].amount, "mahajan": e[1], "status": e[0].payment_status, "date": e[0].date_time.strftime('%I:%M %p')} for e in expenses]
     })
-
 @app.route('/api/staff/today_pay', methods=['GET'])
 def get_today_staff_pay():
     today = datetime.today().date()
@@ -535,6 +616,58 @@ def delete_expense(id):
     db.session.delete(expense)
     db.session.commit()
     return jsonify({"message": "Expense deleted!"})
+
+# --- DAILY INCOME & DASHBOARD STATS ---
+@app.route('/api/income', methods=['POST'])
+def add_income():
+    data = request.json
+    new_income = DailyIncome(payment_mode=data['payment_mode'], amount=float(data['amount']), description=data.get('description', ''))
+    db.session.add(new_income)
+    db.session.commit()
+    return jsonify({"message": "Income recorded!"}), 201
+
+@app.route('/api/dashboard/stats', methods=['GET'])
+def get_dashboard_stats():
+    today = datetime.today().date()
+    
+    staff_logs = Ledger.query.filter(db.func.date(Ledger.date_time) == today, Ledger.txn_type == 'Advance').all()
+    total_staff_pay = sum(l.amount for l in staff_logs)
+    
+    expenses = DailyExpense.query.filter(db.func.date(DailyExpense.date_time) == today).all()
+    total_expense = sum(e.amount for e in expenses)
+    
+    incomes = DailyIncome.query.filter(db.func.date(DailyIncome.date_time) == today).all()
+    total_cash = sum(i.amount for i in incomes if i.payment_mode == 'Cash')
+    total_online = sum(i.amount for i in incomes if i.payment_mode == 'Online')
+    total_income = total_cash + total_online
+    
+    net_income = total_income - total_expense - total_staff_pay
+    
+    return jsonify({
+        "total_income": total_income, "total_cash": total_cash, "total_online": total_online,
+        "total_expense": total_expense, "total_staff_pay": total_staff_pay, "net_income": net_income
+    })
+
+# --- MAHAJAN ROUTES ---
+@app.route('/api/mahajans', methods=['GET', 'POST'])
+def manage_mahajans():
+    if request.method == 'POST':
+        data = request.json
+        db.session.add(Mahajan(name=data['name'], phone=data.get('phone', '')))
+        db.session.commit()
+        return jsonify({"message": "Mahajan added!"}), 201
+    
+    mahajans = Mahajan.query.all()
+    return jsonify([{"id": m.id, "name": m.name, "phone": m.phone, "balance": m.balance} for m in mahajans])
+
+@app.route('/api/mahajans/<int:id>/pay', methods=['POST'])
+def pay_mahajan(id):
+    mahajan = Mahajan.query.get_or_404(id)
+    amount = float(request.json.get('amount', 0))
+    mahajan.balance -= amount
+    db.session.add(MahajanLedger(mahajan_id=id, txn_type='Payment', amount=amount, description='Payment Cleared'))
+    db.session.commit()
+    return jsonify({"message": "Payment successful!", "balance": mahajan.balance})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5000)

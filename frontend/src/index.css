@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-hindi: "Noto Sans Devanagari", "Mangal", sans-serif;
+}
+
+@layer base {
+  body {
+    -webkit-tap-highlight-color: transparent;
+    /* Hindi text ke liye better rendering */
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Tablet-specific touch targets */
+  @media (min-width: 768px) and (max-width: 1024px) {
+    button, a { min-height: 44px; }
+  }
+}
+
+/* Hide scrollbar for a cleaner iOS-like feel */
+::-webkit-scrollbar { width: 0px; height: 0px; background: transparent; }
+
+/* Animations */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out both;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+}
+
+/* Tablet layout optimization (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* Sidebar thoda chota aur compact */
+  aside { font-size: 0.9rem; }
+  /* Cards ka padding thoda kam */
+  .md\:p-8 { padding: 1.25rem !important; }
+}
+
+/* Safe area support for iOS notch / home bar */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 8px); }
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }

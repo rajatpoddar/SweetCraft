@@ -1,0 +1,230 @@
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+
+const resources = {
+  en: {
+    translation: {
+      // Nav
+      "Overview": "Overview", "Stock & Inventory": "Stock & Inventory", "Party Orders": "Party Orders",
+      "Staff Khata": "Staff Khata", "Market Udhari": "Market Udhari", "All Reports": "All Reports",
+      "Menu Manager": "Menu Manager", "Daily Expenses": "Daily Expenses", "Mahajan Manager": "Mahajan Manager",
+      "Shop Settings": "Shop Settings", "Theme": "Theme", "Logout": "Logout",
+      "Home": "Home", "Stock": "Stock", "Orders": "Orders", "Udhari": "Udhari", "Menu": "Menu", "More": "More",
+      "Staff": "Staff", "Kharcha": "Expense",
+      // Page Headings
+      "Overview Page": "Overview", "Stock Page": "Stock & Inventory",
+      "Party Orders Page": "Party Orders", "Staff Page": "Staff Khata",
+      "Market Udhari Page": "Market Udhari", "Daily Expenses Page": "Daily Expenses",
+      "Menu Manager Page": "Menu Manager", "Mahajan Ledger Page": "Mahajan Ledger",
+      "All Reports Page": "All Reports", "Shop Settings Page": "Shop Settings",
+      // Login
+      "Secure Login": "Secure Login", "Username": "Username", "Password": "Password",
+      // Dashboard
+      "Welcome back, here's your daily summary.": "Welcome back, here's your daily summary.",
+      "Net Daily Income (In - Out)": "Net Daily Income (In - Out)",
+      "Record Direct Income": "Record Direct Income",
+      "Cash": "Cash", "Online": "Online", "₹ Amount": "₹ Amount", "Detail (Optional)": "Detail (Optional)",
+      "Total Daily Income": "Total Daily Income", "Total Daily Expense": "Total Daily Expense",
+      "Staff Pay (Today)": "Staff Pay (Today)", "Active Alerts": "Active Alerts",
+      "Staff Present": "Staff Present", "Pending Orders": "Pending Orders",
+      "Expiring Stock": "Expiring Stock", "Upcoming Orders": "Upcoming Orders",
+      "Low Stock Alerts": "Low Stock Alerts",
+      // Inventory
+      "Add New Stock": "Add New Stock", "Item Name": "Item Name", "Qty": "Qty",
+      "Limit (Alert)": "Limit (Alert)", "Expiry Date": "Expiry Date", "Add": "Add",
+      "Current Stock": "Current Stock", "Search stock item...": "Search stock item...",
+      "Total Stock": "Total Stock", "Expiry Batches": "Expiry Batches",
+      "Exp": "Exp", "Sale": "Sale", "Return": "Return", "All stock finished.": "All stock finished.",
+      // Staff
+      "Total Pay Given Today": "Total Pay Given Today", "Register New Staff": "Register New Staff",
+      "Name": "Name", "Mobile": "Mobile", "Address": "Address", "Pay Type": "Pay Type",
+      "Daily Wage": "Daily Wage", "Monthly Salary": "Monthly Salary", "Amount (₹)": "Amount (₹)",
+      "Add Staff": "Add Staff", "All Staff": "All Staff",
+      "Search staff name or mobile...": "Search staff name or mobile...",
+      "Attendance": "Attendance", "Present": "Present", "Half": "Half", "Absent": "Absent",
+      "Pay": "Pay", "Settle": "Settle", "Log": "Log", "Edit": "Edit",
+      "Pay Staff Amount": "Pay Staff Amount", "Settle Staff Dues": "Settle Staff Dues",
+      "Note / Detail": "Note / Detail", "Confirm Pay": "Confirm Pay", "Confirm Settle": "Confirm Settle",
+      "No records found.": "No records found.", "No staff found.": "No staff found.",
+      // Orders
+      "Book New Order": "Book New Order", "Customer Name": "Customer Name", "Phone": "Phone",
+      "Delivery Date": "Delivery Date", "Search/Select Menu Item (Or type custom)": "Search/Select Menu Item (Or type custom)",
+      "Price/Unit": "Price/Unit", "Add Item": "Add Item", "Order Items:": "Order Items:",
+      "Sum Total": "Sum Total", "Final Total Cost (₹)": "Final Total Cost (₹)",
+      "Advance Paid (₹)": "Advance Paid (₹)", "Book Order": "Book Order",
+      "Pending & In Progress": "Pending & In Progress",
+      "Search customer, phone or item...": "Search customer, phone or item...",
+      "Delivers": "Delivers", "Total": "Total", "Discount": "Discount", "Due": "Due",
+      "Start": "Start", "Deliver": "Deliver", "Delivered Orders": "Delivered Orders",
+      "Delivered": "Delivered", "Dues Cleared": "Dues Cleared", "Due in Udhari": "Due in Udhari",
+      "Complete Order": "Complete Order", "Customer": "Customer", "Total Due": "Total Due",
+      "Amount Received Now (₹)": "Amount Received Now (₹)", "Complete": "Complete", "To Udhari": "To Udhari",
+      "No pending orders match your search.": "No pending orders match your search.",
+      "No delivered orders match your search.": "No delivered orders match your search.",
+      // Debt
+      "Add Khata": "Add Khata", "Udhari List": "Udhari List",
+      "Search customer or phone...": "Search customer or phone...",
+      "Total Due": "Total Due", "Udhar": "Udhar", "Jama": "Jama",
+      "Naya Udhar Bill": "Naya Udhar Bill", "Payment Receive": "Payment Receive",
+      "Search/Select Item (Or custom)": "Search/Select Item (Or custom)",
+      "Udhar Items": "Udhar Items", "Final Amount (Edit to round off)": "Final Amount (Edit to round off)",
+      "Received Amount (₹)": "Received Amount (₹)", "Confirm Transaction": "Confirm Transaction",
+      "Udhari aur Payment ki details": "Udhari & Payment Details",
+      "No customer found.": "No customer found.",
+      // Reports
+      "Daily Income": "Daily Income", "Daily Expense": "Daily Expense",
+      "Udhari Ledger": "Udhari Ledger", "Inventory": "Inventory", "Returns": "Returns",
+      "Payment Mode": "Payment Mode", "Details": "Details", "Date": "Date",
+      "Item/Detail": "Item/Detail", "Mahajan/Status": "Mahajan/Status", "Action": "Action",
+      "Return Qty": "Return Qty", "Staff Name": "Staff Name", "Transaction": "Transaction",
+      "Previous": "Previous", "Next": "Next", "Page": "Page", "of": "of",
+      // Menu Manager
+      "Add Display Item": "Add Display Item", "Edit Menu Item": "Edit Menu Item",
+      "Cancel Edit": "Cancel Edit", "Item Details (Tagline)": "Item Details (Tagline)",
+      "Category": "Category", "Sweets": "Sweets", "Snacks": "Snacks", "Beverages": "Beverages", "Namkeen": "Namkeen",
+      "Price (₹)": "Price (₹)", "Unit": "Unit", "Per Piece (pc)": "Per Piece (pc)",
+      "Per Kg": "Per Kg", "Per Plate": "Per Plate", "Per Glass": "Per Glass",
+      "Upload Image": "Upload Image", "Change Image (Optional)": "Change Image (Optional)",
+      "Bestseller": "Bestseller", "In Stock": "In Stock", "Out of Stock": "Out of Stock",
+      "Save Item": "Save Item", "Update Item": "Update Item",
+      "All Menu Items": "All Menu Items", "Search menu...": "Search menu...",
+      "No items found.": "No items found.",
+      // Expenses
+      "Total Expenses Today": "Total Expenses Today", "Add New Expense": "Add New Expense",
+      "Expense Detail (Saman)": "Expense Detail (Saman)",
+      "Total Amount (₹)": "Total Amount (₹)", "Mahajan/Vendor (Optional)": "Mahajan/Vendor (Optional)",
+      "No Mahajan (Direct)": "No Mahajan (Direct)", "Payment Status": "Payment Status",
+      "Paid Instantly": "Paid Instantly", "Udhari (Credit)": "Udhari (Credit)",
+      "Note Expense": "Note Expense", "Today's Expense Log": "Today's Expense Log",
+      "No expense entry today.": "No expense entry today.", "Vendor": "Vendor",
+      // Mahajan
+      "Add New Mahajan / Vendor": "Add New Mahajan / Vendor", "Vendor Name": "Vendor Name",
+      "Add Vendor": "Add Vendor", "Total Dues to Pay": "Total Dues to Pay", "Pay Vendor": "Pay Vendor",
+      // Shop Settings
+      "Dukaan ki Jankari": "Shop Details", "Shop Name": "Shop Name",
+      "Tagline / Description": "Tagline / Description", "Owner Name": "Owner Name",
+      "Primary Phone": "Primary Phone", "Alternate Phone": "Alternate Phone",
+      "City / State": "City / State", "UPI ID (for QR)": "UPI ID (for QR)",
+      "GSTIN (Optional)": "GSTIN (Optional)", "Invoice Footer Note": "Invoice Footer Note",
+      "Save Settings": "Save Settings", "Settings Saved!": "Settings Saved!",
+      // Public Menu
+      "Our": "Our", "Authentic taste, crafted with love.": "Authentic taste, crafted with love.",
+      "Search for sweets, snacks...": "Search for sweets, snacks...",
+      "No items found": "No items found", "Try searching for something else.": "Try searching for something else.",
+      "OUT OF STOCK": "OUT OF STOCK", "Premium Menu": "Premium Menu", "Hot": "Hot",
+    }
+  },
+  hi: {
+    translation: {
+      // Nav
+      "Overview": "डैशबोर्ड", "Stock & Inventory": "स्टॉक और भंडार", "Party Orders": "पार्टी ऑर्डर",
+      "Staff Khata": "स्टाफ खाता", "Market Udhari": "बाजार उधारी", "All Reports": "सभी रिपोर्ट",
+      "Menu Manager": "मेन्यू प्रबंधक", "Daily Expenses": "दैनिक खर्च", "Mahajan Manager": "महाजन प्रबंधक",
+      "Shop Settings": "दुकान सेटिंग", "Theme": "थीम", "Logout": "लॉग आउट",
+      "Home": "होम", "Stock": "स्टॉक", "Orders": "ऑर्डर", "Udhari": "उधारी", "Menu": "मेन्यू", "More": "और",
+      "Staff": "स्टाफ", "Kharcha": "खर्च",
+      // Login
+      "Secure Login": "सुरक्षित लॉगिन", "Username": "यूज़रनेम", "Password": "पासवर्ड",
+      // Dashboard
+      "Welcome back, here's your daily summary.": "स्वागत है! यहाँ आपका आज का सारांश है।",
+      "Net Daily Income (In - Out)": "आज की शुद्ध कमाई (आय - खर्च)",
+      "Record Direct Income": "सीधी आय दर्ज करें",
+      "Cash": "नकद", "Online": "ऑनलाइन", "₹ Amount": "₹ राशि", "Detail (Optional)": "विवरण (वैकल्पिक)",
+      "Total Daily Income": "कुल दैनिक आय", "Total Daily Expense": "कुल दैनिक खर्च",
+      "Staff Pay (Today)": "आज का स्टाफ वेतन", "Active Alerts": "सक्रिय अलर्ट",
+      "Staff Present": "उपस्थित स्टाफ", "Pending Orders": "लंबित ऑर्डर",
+      "Expiring Stock": "एक्सपायर होने वाला स्टॉक", "Upcoming Orders": "आने वाले ऑर्डर",
+      "Low Stock Alerts": "कम स्टॉक अलर्ट",
+      // Inventory
+      "Add New Stock": "नया स्टॉक जोड़ें", "Item Name": "आइटम का नाम", "Qty": "मात्रा",
+      "Limit (Alert)": "न्यूनतम सीमा (अलर्ट)", "Expiry Date": "समाप्ति तिथि", "Add": "जोड़ें",
+      "Current Stock": "वर्तमान स्टॉक", "Search stock item...": "स्टॉक आइटम खोजें...",
+      "Total Stock": "कुल स्टॉक", "Expiry Batches": "एक्सपायरी बैच",
+      "Exp": "समाप्ति", "Sale": "बिक्री", "Return": "वापसी", "All stock finished.": "सारा स्टॉक खत्म हो गया।",
+      // Staff
+      "Total Pay Given Today": "आज का कुल भुगतान", "Register New Staff": "नया स्टाफ जोड़ें",
+      "Name": "नाम", "Mobile": "मोबाइल", "Address": "पता", "Pay Type": "वेतन प्रकार",
+      "Daily Wage": "दैनिक मजदूरी", "Monthly Salary": "मासिक वेतन", "Amount (₹)": "राशि (₹)",
+      "Add Staff": "स्टाफ जोड़ें", "All Staff": "सभी स्टाफ",
+      "Search staff name or mobile...": "स्टाफ नाम या मोबाइल खोजें...",
+      "Attendance": "उपस्थिति", "Present": "उपस्थित", "Half": "आधा दिन", "Absent": "अनुपस्थित",
+      "Pay": "भुगतान", "Settle": "सेटल", "Log": "लॉग", "Edit": "संपादन",
+      "Pay Staff Amount": "स्टाफ को भुगतान", "Settle Staff Dues": "स्टाफ बकाया सेटल",
+      "Note / Detail": "नोट / विवरण", "Confirm Pay": "भुगतान पुष्टि", "Confirm Settle": "सेटल पुष्टि",
+      "No records found.": "कोई रिकॉर्ड नहीं मिला।", "No staff found.": "कोई स्टाफ नहीं मिला।",
+      // Orders
+      "Book New Order": "नया ऑर्डर बुक करें", "Customer Name": "ग्राहक का नाम", "Phone": "फ़ोन",
+      "Delivery Date": "डिलीवरी तारीख", "Search/Select Menu Item (Or type custom)": "मेन्यू आइटम चुनें या टाइप करें",
+      "Price/Unit": "मूल्य/इकाई", "Add Item": "आइटम जोड़ें", "Order Items:": "ऑर्डर आइटम:",
+      "Sum Total": "कुल योग", "Final Total Cost (₹)": "कुल अंतिम राशि (₹)",
+      "Advance Paid (₹)": "अग्रिम भुगतान (₹)", "Book Order": "ऑर्डर बुक करें",
+      "Pending & In Progress": "लंबित और प्रगति में",
+      "Search customer, phone or item...": "ग्राहक, फोन या आइटम खोजें...",
+      "Delivers": "डिलीवरी", "Total": "कुल", "Discount": "छूट", "Due": "बकाया",
+      "Start": "शुरू करें", "Deliver": "डिलीवर करें", "Delivered Orders": "डिलीवर ऑर्डर",
+      "Delivered": "डिलीवर हुआ", "Dues Cleared": "बकाया चुकाया", "Due in Udhari": "उधारी में बकाया",
+      "Complete Order": "ऑर्डर पूरा करें", "Customer": "ग्राहक",
+      "Amount Received Now (₹)": "अभी प्राप्त राशि (₹)", "Complete": "पूरा हुआ", "To Udhari": "उधारी में",
+      "No pending orders match your search.": "कोई लंबित ऑर्डर नहीं मिला।",
+      "No delivered orders match your search.": "कोई डिलीवर ऑर्डर नहीं मिला।",
+      // Debt
+      "Add Khata": "खाता जोड़ें", "Udhari List": "उधारी सूची",
+      "Search customer or phone...": "ग्राहक या फोन खोजें...",
+      "Total Due": "कुल बकाया", "Udhar": "उधार", "Jama": "जमा",
+      "Naya Udhar Bill": "नया उधार बिल", "Payment Receive": "भुगतान प्राप्त",
+      "Search/Select Item (Or custom)": "आइटम चुनें या टाइप करें",
+      "Udhar Items": "उधार आइटम", "Final Amount (Edit to round off)": "अंतिम राशि (गोल करें)",
+      "Received Amount (₹)": "प्राप्त राशि (₹)", "Confirm Transaction": "लेनदेन पुष्टि",
+      "Udhari aur Payment ki details": "उधारी और भुगतान की जानकारी",
+      "No customer found.": "कोई ग्राहक नहीं मिला।",
+      // Reports
+      "Daily Income": "दैनिक आय", "Daily Expense": "दैनिक खर्च",
+      "Udhari Ledger": "उधारी खाता", "Inventory": "भंडार", "Returns": "वापसी",
+      "Payment Mode": "भुगतान माध्यम", "Details": "विवरण", "Date": "तारीख",
+      "Item/Detail": "आइटम/विवरण", "Mahajan/Status": "महाजन/स्थिति", "Action": "क्रिया",
+      "Return Qty": "वापसी मात्रा", "Staff Name": "स्टाफ नाम", "Transaction": "लेनदेन",
+      "Previous": "पिछला", "Next": "अगला", "Page": "पेज", "of": "में से",
+      // Menu Manager
+      "Add Display Item": "नया आइटम जोड़ें", "Edit Menu Item": "आइटम संपादित करें",
+      "Cancel Edit": "संपादन रद्द करें", "Item Details (Tagline)": "आइटम विवरण (टैगलाइन)",
+      "Category": "श्रेणी", "Sweets": "मिठाई", "Snacks": "स्नैक्स", "Beverages": "पेय", "Namkeen": "नमकीन",
+      "Price (₹)": "मूल्य (₹)", "Unit": "इकाई", "Per Piece (pc)": "प्रति नग",
+      "Per Kg": "प्रति किलो", "Per Plate": "प्रति थाली", "Per Glass": "प्रति गिलास",
+      "Upload Image": "फोटो अपलोड करें", "Change Image (Optional)": "फोटो बदलें (वैकल्पिक)",
+      "Bestseller": "सबसे ज्यादा बिकने वाला", "In Stock": "उपलब्ध", "Out of Stock": "अनुपलब्ध",
+      "Save Item": "आइटम सहेजें", "Update Item": "आइटम अपडेट करें",
+      "All Menu Items": "सभी मेन्यू आइटम", "Search menu...": "मेन्यू खोजें...",
+      "No items found.": "कोई आइटम नहीं मिला।",
+      // Expenses
+      "Total Expenses Today": "आज का कुल खर्च", "Add New Expense": "नया खर्च जोड़ें",
+      "Expense Detail (Saman)": "खर्च विवरण (सामान)",
+      "Total Amount (₹)": "कुल राशि (₹)", "Mahajan/Vendor (Optional)": "महाजन/विक्रेता (वैकल्पिक)",
+      "No Mahajan (Direct)": "कोई महाजन नहीं (सीधा)", "Payment Status": "भुगतान स्थिति",
+      "Paid Instantly": "तुरंत भुगतान", "Udhari (Credit)": "उधारी (क्रेडिट)",
+      "Note Expense": "खर्च नोट करें", "Today's Expense Log": "आज का खर्च लॉग",
+      "No expense entry today.": "आज कोई खर्च दर्ज नहीं है।", "Vendor": "विक्रेता",
+      // Mahajan
+      "Add New Mahajan / Vendor": "नया महाजन / विक्रेता जोड़ें", "Vendor Name": "विक्रेता का नाम",
+      "Add Vendor": "विक्रेता जोड़ें", "Total Dues to Pay": "कुल देय राशि", "Pay Vendor": "भुगतान करें",
+      // Shop Settings
+      "Dukaan ki Jankari": "दुकान की जानकारी", "Shop Name": "दुकान का नाम",
+      "Tagline / Description": "टैगलाइन / विवरण", "Owner Name": "मालिक का नाम",
+      "Primary Phone": "मुख्य फोन", "Alternate Phone": "वैकल्पिक फोन",
+      "City / State": "शहर / राज्य", "UPI ID (for QR)": "UPI आईडी (QR के लिए)",
+      "GSTIN (Optional)": "GSTIN (वैकल्पिक)", "Invoice Footer Note": "बिल फुटर नोट",
+      "Save Settings": "सेटिंग सहेजें", "Settings Saved!": "सेटिंग सहेजी गई!",
+      // Public Menu
+      "Our": "हमारा", "Authentic taste, crafted with love.": "असली स्वाद, प्यार से बनाया गया।",
+      "Search for sweets, snacks...": "मिठाई, स्नैक्स खोजें...",
+      "No items found": "कोई आइटम नहीं मिला", "Try searching for something else.": "कुछ और खोजने का प्रयास करें।",
+      "OUT OF STOCK": "स्टॉक खत्म", "Premium Menu": "प्रीमियम मेन्यू", "Hot": "हॉट",
+    }
+  }
+};
+
+i18n.use(initReactI18next).init({
+  resources, lng: localStorage.getItem('app_lang') || 'hi',
+  fallbackLng: "en", interpolation: { escapeValue: false }
+});
+
+export default i18n;

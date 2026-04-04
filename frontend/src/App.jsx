@@ -2897,11 +2897,16 @@ function ExpensePage() {
 
   const handleAddExpense = (e) => {
     e.preventDefault();
-    shopFetch(API_BASE_URL + '/api/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) })
+    const payload = {
+      ...formData,
+      mahajan_id: formData.mahajan_id || null,
+      payment_status: formData.mahajan_id ? formData.payment_status : 'Paid',
+    };
+    shopFetch(API_BASE_URL + '/api/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       .then(() => { 
          setFormData({ item_name: '', amount: '', mahajan_id: '', payment_status: 'Paid' }); 
          fetchExpenses(); 
-         fetchSuggestions(); // Entry ke baad suggestions list refresh karega
+         fetchSuggestions();
       });
   };
 
@@ -2954,10 +2959,17 @@ function ExpensePage() {
           <UI_Input label={t('Total Amount (₹)')} type="number" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} required />
           
           <div>
-             <UI_Select label={t('Mahajan/Vendor (Optional)')} options={[{label:'No Mahajan (Direct)', value:''}].concat(mahajans.map(m => ({label: m.name, value: m.id})))} value={formData.mahajan_id} onChange={e => setFormData({ ...formData, mahajan_id: e.target.value })} />
+             <UI_Select label={t('Mahajan/Vendor (Optional)')} options={[{label:'No Mahajan (Direct)', value:''}].concat(mahajans.map(m => ({label: m.name, value: m.id})))} value={formData.mahajan_id} onChange={e => setFormData({ ...formData, mahajan_id: e.target.value, payment_status: 'Paid' })} />
           </div>
           
-          <UI_Select label={t('Payment Status')} options={[{label:'Paid Instantly', value:'Paid'}, {label:'Udhari (Credit)', value:'Credit'}]} value={formData.payment_status} onChange={e => setFormData({ ...formData, payment_status: e.target.value })} disabled={!formData.mahajan_id} />
+          {formData.mahajan_id ? (
+            <UI_Select label={t('Payment Status')} options={[{label:'Paid Instantly', value:'Paid'}, {label:'Udhari (Credit)', value:'Credit'}]} value={formData.payment_status} onChange={e => setFormData({ ...formData, payment_status: e.target.value })} />
+          ) : (
+            <div className="w-full">
+              <label className="block text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-2 ml-1">{t('Payment Status')}</label>
+              <div className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl px-4 py-3 text-zinc-500 dark:text-zinc-400 font-semibold text-sm">Direct Cash Payment (Paid)</div>
+            </div>
+          )}
           
           <UI_Button type="submit" variant="secondary" className="h-[50px]">{t('Note Expense')}</UI_Button>
         </form>

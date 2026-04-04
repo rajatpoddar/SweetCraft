@@ -822,7 +822,9 @@ def manage_expenses():
     sid = get_shop_id()
     if request.method == 'POST':
         data = request.json
-        mahajan_id = data.get('mahajan_id')
+        mahajan_id = data.get('mahajan_id') or None
+        if mahajan_id:
+            mahajan_id = int(mahajan_id)
         payment_status = data.get('payment_status', 'Paid')
         amount = float(data['amount'])
         qty = float(data.get('quantity', 1.0))

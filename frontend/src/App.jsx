@@ -12,7 +12,6 @@ import MenuCard from './MenuCard';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 const API_BASE_URL = import.meta.env.DEV ? `http://${window.location.hostname}:5000` : '';
 
@@ -113,6 +112,7 @@ function App() {
 function AdminLayout({ logout, toggleTheme, isDarkMode, shopName }) {
   const { t, i18n } = useTranslation();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true');
 
   const toggleLanguage = () => {
     const newLang = i18n.language === 'en' ? 'hi' : 'en';
@@ -120,46 +120,67 @@ function AdminLayout({ logout, toggleTheme, isDarkMode, shopName }) {
     localStorage.setItem('app_lang', newLang);
   };
 
+  const toggleSidebar = () => {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    localStorage.setItem('sidebar_collapsed', next);
+  };
+
   return (
     <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950 overflow-hidden font-sans text-zinc-900 dark:text-zinc-50 antialiased selection:bg-purple-500/30">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-2xl border-r border-zinc-200 dark:border-zinc-800 flex-shrink-0 z-20 transition-all">
-        <div className="p-6 lg:p-8 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
+      <aside className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64 lg:w-72'} bg-white/70 dark:bg-zinc-900/70 backdrop-blur-2xl border-r border-zinc-200 dark:border-zinc-800 flex-shrink-0 z-20 transition-all duration-300`}>
+        <div className={`p-4 flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 p-6 lg:p-8'}`}>
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20 flex-shrink-0">
             <Droplets className="text-white" size={24} />
           </div>
-          <div>
-            <h2 className="text-xl lg:text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-indigo-600 tracking-tight">{shopName}</h2>
-            <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Poddar Solutions</p>
-          </div>
-        </div>
-        <nav className="px-3 lg:px-4 py-2 space-y-1 flex-1 overflow-y-auto">
-          <NavItem to="/" icon={<LayoutDashboard size={20} />} label={t("Overview")} />
-          <NavItem to="/inventory" icon={<Package size={20} />} label={t("Stock & Inventory")} />
-          <NavItem to="/orders" icon={<ShoppingBag size={20} />} label={t("Party Orders")} />
-          <NavItem to="/staff" icon={<Users size={20} />} label={t("Staff Khata")} />
-          <NavItem to="/debt" icon={<IndianRupee size={20} />} label={t("Market Udhari")} />
-          <NavItem to="/expenses" icon={<ReceiptText size={20} />} label={t("Daily Expenses")} />
-          <NavItem to="/menu-manager" icon={<Store size={20} />} label={t("Menu Manager")} />
-          <NavItem to="/mahajan" icon={<Briefcase size={20} />} label={t("Mahajan Manager")} />
-          <NavItem to="/reports" icon={<History size={20} />} label={t("All Reports")} />
-          <NavItem to="/settings" icon={<Settings size={20} />} label={t("Shop Settings")} />
-        </nav>
-        <div className="p-4 lg:p-6 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-zinc-500">{t("Theme")} / Lang</span>
-            <div className="flex gap-2">
-              <button onClick={toggleLanguage} className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all" title="हिंदी / English">
-                <Languages size={18} />
-              </button>
-              <button onClick={toggleTheme} className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all">
-                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
+          {!sidebarCollapsed && (
+            <div className="overflow-hidden">
+              <h2 className="text-xl lg:text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-indigo-600 tracking-tight truncate">{shopName}</h2>
+              <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Poddar Solutions</p>
             </div>
-          </div>
-          <button onClick={logout} className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold rounded-2xl transition-all active:scale-95">
-            <LogOut size={18} /> {t("Logout")}
+          )}
+        </div>
+        <nav className={`${sidebarCollapsed ? 'px-2' : 'px-3 lg:px-4'} py-2 space-y-1 flex-1 overflow-y-auto`}>
+          <NavItem to="/" icon={<LayoutDashboard size={20} />} label={t("Overview")} collapsed={sidebarCollapsed} />
+          <NavItem to="/inventory" icon={<Package size={20} />} label={t("Stock & Inventory")} collapsed={sidebarCollapsed} />
+          <NavItem to="/orders" icon={<ShoppingBag size={20} />} label={t("Party Orders")} collapsed={sidebarCollapsed} />
+          <NavItem to="/staff" icon={<Users size={20} />} label={t("Staff Khata")} collapsed={sidebarCollapsed} />
+          <NavItem to="/debt" icon={<IndianRupee size={20} />} label={t("Market Udhari")} collapsed={sidebarCollapsed} />
+          <NavItem to="/expenses" icon={<ReceiptText size={20} />} label={t("Daily Expenses")} collapsed={sidebarCollapsed} />
+          <NavItem to="/menu-manager" icon={<Store size={20} />} label={t("Menu Manager")} collapsed={sidebarCollapsed} />
+          <NavItem to="/mahajan" icon={<Briefcase size={20} />} label={t("Mahajan Manager")} collapsed={sidebarCollapsed} />
+          <NavItem to="/reports" icon={<History size={20} />} label={t("All Reports")} collapsed={sidebarCollapsed} />
+          <NavItem to="/settings" icon={<Settings size={20} />} label={t("Shop Settings")} collapsed={sidebarCollapsed} />
+        </nav>
+        <div className={`${sidebarCollapsed ? 'p-2' : 'p-4 lg:p-6'} border-t border-zinc-200 dark:border-zinc-800 space-y-2`}>
+          {!sidebarCollapsed && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-zinc-500">{t("Theme")} / Lang</span>
+              <div className="flex gap-2">
+                <button onClick={toggleLanguage} className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all" title="हिंदी / English">
+                  <Languages size={18} />
+                </button>
+                <button onClick={toggleTheme} className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all">
+                  {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+                </button>
+              </div>
+            </div>
+          )}
+          <button onClick={toggleSidebar} className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full p-2' : 'gap-2 w-full py-2 px-3'} rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all active:scale-95`} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <ChevronRight size={18} className={`transition-transform duration-300 ${sidebarCollapsed ? '' : 'rotate-180'}`} />
+            {!sidebarCollapsed && <span className="text-xs font-bold">Collapse</span>}
           </button>
+          {!sidebarCollapsed && (
+            <button onClick={logout} className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold rounded-2xl transition-all active:scale-95">
+              <LogOut size={18} /> {t("Logout")}
+            </button>
+          )}
+          {sidebarCollapsed && (
+            <button onClick={logout} className="flex items-center justify-center w-full p-2 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-all active:scale-95" title="Logout">
+              <LogOut size={18} />
+            </button>
+          )}
         </div>
       </aside>
 
@@ -262,9 +283,16 @@ function MoreDrawer({ onClose, logout, t, toggleLanguage, toggleTheme, isDarkMod
   );
 }
 
-function NavItem({ to, icon, label }) {
+function NavItem({ to, icon, label, collapsed }) {
   const location = useLocation();
   const isActive = location.pathname === to;
+  if (collapsed) {
+    return (
+      <Link to={to} title={label} className={`flex items-center justify-center p-3 rounded-2xl transition-all duration-200 ${isActive ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-md' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-100'}`}>
+        <span className={`${isActive ? 'scale-110' : ''} transition-transform`}>{icon}</span>
+      </Link>
+    );
+  }
   return (
     <Link to={to} className={`flex items-center space-x-3 px-3 lg:px-4 py-3 rounded-2xl transition-all duration-200 font-semibold group text-sm lg:text-base ${isActive ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-md' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-100'}`}>
       <span className={`${isActive ? 'scale-110' : 'group-hover:scale-110'} transition-transform flex-shrink-0`}>{icon}</span>
@@ -541,7 +569,7 @@ function Dashboard() {
       {/* Main Income Stats */}
       <div className="bg-gradient-to-br from-emerald-400 to-teal-500 p-6 md:p-8 rounded-[2rem] text-white shadow-lg flex flex-col gap-6">
           <div className="flex-1">
-              <p className="text-emerald-50 font-bold tracking-widest mb-2 uppercase text-[10px]">{t('Net Daily Income')}</p>
+              <p className="text-emerald-50 font-bold tracking-widest mb-2 uppercase text-[10px]">{t('Net Daily Sales')}</p>
               <h3 className="text-5xl md:text-6xl font-black tracking-tight leading-none mb-3">₹{stats.net_income}</h3>
               <div className="flex flex-wrap gap-2 text-xs font-bold">
                  <span className="bg-white/20 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-white/10">💰 Sale: ₹{stats.total_income}</span>
@@ -549,7 +577,8 @@ function Dashboard() {
                  <span className="bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-black/5">👥 Staff: ₹{stats.total_staff_pay}</span>
                  <span className="bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-black/5">🏦 Principle: ₹{stats.total_principle}</span>
               </div>
-              <p className="text-emerald-50/80 text-xs mt-3 font-medium">Formula: Expense + Staff + Principle - Sale</p>
+              <p className="text-emerald-50/80 text-xs mt-3 font-medium">Net Sale = Expense + Staff + Principle - Sale</p>
+              <p className="text-emerald-50/80 text-xs mt-1 font-medium">Total Cash in Hand: ₹{stats.total_income + stats.total_principle}</p>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1866,6 +1895,7 @@ function ReportsPage() {
   const [activeTab, setActiveTab] = useState('incomes');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [stats, setStats] = useState({ total_income: 0, total_cash: 0, total_online: 0, total_expense: 0, total_staff_pay: 0, total_principle: 0, net_income: 0 });
+  const [editModal, setEditModal] = useState({ isOpen: false, type: null, row: null });
   
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
@@ -1890,86 +1920,214 @@ function ReportsPage() {
     setCurrentPage(1);
   };
 
-  const handleDownloadPDF = async (e) => {
+  const handleEditSave = async (e) => {
+    e.preventDefault();
+    const { type, row } = editModal;
+    const endpoint = type === 'income' ? `/api/income/${row.id}` : `/api/principle/${row.id}`;
+    await shopFetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(row)
+    });
+    setEditModal({ isOpen: false, type: null, row: null });
+    fetchReports(selectedDate);
+    fetchStats(selectedDate);
+  };
+
+  const handleDelete = async (type, id) => {
+    if (!window.confirm('Kya aap is entry ko delete karna chahte hain?')) return;
+    const endpoint = type === 'income' ? `/api/income/${id}` : `/api/principle/${id}`;
+    await shopFetch(`${API_BASE_URL}${endpoint}`, { method: 'DELETE' });
+    fetchReports(selectedDate);
+    fetchStats(selectedDate);
+  };
+
+  const handleDownloadPDF = (e) => {
     const button = e.currentTarget;
-    const originalContent = button.innerHTML;
-    
+    button.disabled = true;
     try {
-      // Show loading indicator
-      button.disabled = true;
-      button.innerHTML = '<span class="flex items-center justify-center gap-2"><svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><circle class="opacity-75" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="32" stroke-dashoffset="16"></circle></svg>Generating...</span>';
-
-      // Get the printable content
-      const printContent = document.getElementById('printable-report');
-      if (!printContent) {
-        alert('Report content not found. Please try again.');
-        button.disabled = false;
-        button.innerHTML = originalContent;
-        return;
-      }
-
-      // Create a temporary container for PDF generation
-      const tempContainer = document.createElement('div');
-      tempContainer.style.position = 'absolute';
-      tempContainer.style.left = '-9999px';
-      tempContainer.style.width = '800px';
-      tempContainer.style.padding = '20px';
-      tempContainer.style.backgroundColor = '#ffffff';
-      tempContainer.style.color = '#000000';
-      tempContainer.innerHTML = printContent.innerHTML;
-      document.body.appendChild(tempContainer);
-
-      // Wait a bit for rendering
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Generate canvas from HTML
-      const canvas = await html2canvas(tempContainer, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: 800,
-        windowHeight: tempContainer.scrollHeight
-      });
-
-      // Remove temporary container
-      document.body.removeChild(tempContainer);
-
-      // Calculate PDF dimensions
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 297; // A4 height in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      
-      // Create PDF
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgData = canvas.toDataURL('image/png');
-      let position = 0;
-      
-      // Add first page
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      
-      // Add additional pages if needed
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      const pW = 210;
+      const pH = 297;
+      const ml = 14; // margin left
+      const mr = 14; // margin right
+      const cW = pW - ml - mr; // content width
+      let y = 0;
+
+      const checkPage = (needed = 10) => {
+        if (y + needed > pH - 15) { pdf.addPage(); y = 20; }
+      };
+
+      const setFont = (size, style = 'normal', color = [30, 30, 30]) => {
+        pdf.setFontSize(size);
+        pdf.setFont('helvetica', style);
+        pdf.setTextColor(...color);
+      };
+
+      const fillRect = (x, fy, w, h, r, g, b) => {
+        pdf.setFillColor(r, g, b);
+        pdf.rect(x, fy, w, h, 'F');
+      };
+
+      const hLine = (fy, r = 220, g = 220, b = 220) => {
+        pdf.setDrawColor(r, g, b);
+        pdf.setLineWidth(0.3);
+        pdf.line(ml, fy, pW - mr, fy);
+      };
+
+      // ── HEADER BAND ──────────────────────────────────────────
+      fillRect(0, 0, pW, 32, 67, 56, 202); // indigo-700
+      setFont(18, 'bold', [255, 255, 255]);
+      pdf.text('Daily Business Report', ml, 14);
+      setFont(9, 'normal', [199, 210, 254]); // indigo-200
+      const dateStr = new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+      pdf.text(dateStr, ml, 22);
+      setFont(8, 'normal', [199, 210, 254]);
+      pdf.text(`Generated: ${new Date().toLocaleString('en-IN')}`, pW - mr, 22, { align: 'right' });
+      y = 40;
+
+      // ── SUMMARY CARDS ─────────────────────────────────────────
+      const netSale = stats.net_income;
+      const totalIncome = stats.total_principle - stats.total_income; // Principle - (Cash+Online)
+      const isProfit = totalIncome >= 0;
+      const cashInHand = stats.total_income + stats.total_principle;
+
+      // Card helper
+      const card = (x, cy, w, h, label, value, sub, bgR, bgG, bgB, valR, valG, valB) => {
+        fillRect(x, cy, w, h, bgR, bgG, bgB);
+        setFont(7, 'bold', [100, 100, 120]);
+        pdf.text(label.toUpperCase(), x + 4, cy + 7);
+        setFont(13, 'bold', [valR, valG, valB]);
+        pdf.text(value, x + 4, cy + 16);
+        if (sub) { setFont(7, 'normal', [120, 120, 140]); pdf.text(sub, x + 4, cy + 22); }
+      };
+
+      const cardH = 26;
+      const cardW = (cW - 6) / 4;
+      card(ml,           y, cardW, cardH, 'Total Sale',    `Rs.${stats.total_income}`,   `Cash: ${stats.total_cash} | Online: ${stats.total_online}`, 240,253,244, 5,150,105);
+      card(ml+cardW+2,   y, cardW, cardH, 'Total Expense', `Rs.${stats.total_expense}`,  '', 255,241,242, 190,18,60);
+      card(ml+cardW*2+4, y, cardW, cardH, 'Staff Pay',     `Rs.${stats.total_staff_pay}`, '', 255,247,237, 194,65,12);
+      card(ml+cardW*3+6, y, cardW, cardH, 'Principle',     `Rs.${stats.total_principle}`, '', 239,246,255, 29,78,216);
+      y += cardH + 4;
+
+      // Net Sale + Total Income row
+      const halfW = (cW - 4) / 2;
+      // Net Sale card
+      fillRect(ml, y, halfW, cardH, 243,244,246);
+      setFont(7, 'bold', [100,100,120]); pdf.text('NET DAILY SALES', ml+4, y+7);
+      setFont(13, 'bold', [30,30,30]); pdf.text(`Rs.${netSale}`, ml+4, y+16);
+      setFont(7, 'normal', [120,120,140]); pdf.text('Expense + Staff + Principle - Sale', ml+4, y+22);
+      // Total Income card (Profit/Loss)
+      const tiX = ml + halfW + 4;
+      fillRect(tiX, y, halfW, cardH, isProfit ? 240:255, isProfit ? 253:241, isProfit ? 244:242);
+      setFont(7, 'bold', [100,100,120]); pdf.text('TOTAL INCOME (P&L)', tiX+4, y+7);
+      setFont(13, 'bold', isProfit ? [5,150,105] : [190,18,60]);
+      pdf.text(`${isProfit ? 'PROFIT' : 'LOSS'}: Rs.${Math.abs(totalIncome)}`, tiX+4, y+16);
+      setFont(7, 'normal', [120,120,140]); pdf.text('Principle - (Cash + Online)', tiX+4, y+22);
+      y += cardH + 4;
+
+      // Cash in Hand
+      fillRect(ml, y, cW, 14, 250,245,255);
+      setFont(8, 'bold', [88,28,135]); pdf.text(`Total Cash in Hand: Rs.${cashInHand}`, ml+4, y+9);
+      setFont(7, 'normal', [120,100,160]); pdf.text('= Total Sale + Principle', ml+4+70, y+9);
+      y += 18;
+
+      // ── SECTION HELPER ────────────────────────────────────────
+      const sectionHeader = (title, count) => {
+        checkPage(14);
+        fillRect(ml, y, cW, 10, 67, 56, 202);
+        setFont(9, 'bold', [255,255,255]);
+        pdf.text(title, ml+3, y+7);
+        setFont(8, 'normal', [199,210,254]);
+        pdf.text(`${count} records`, pW-mr-3, y+7, { align: 'right' });
+        y += 10;
+      };
+
+      const tableHeader = (cols, widths) => {
+        checkPage(8);
+        fillRect(ml, y, cW, 7, 243,244,246);
+        setFont(7.5, 'bold', [80,80,100]);
+        let x = ml + 2;
+        cols.forEach((c, i) => { pdf.text(c, x, y+5); x += widths[i]; });
+        y += 7;
+        hLine(y, 200, 200, 210);
+        y += 1;
+      };
+
+      const tableRow = (cols, widths, isAlt = false) => {
+        checkPage(7);
+        if (isAlt) fillRect(ml, y, cW, 6.5, 249,250,251);
+        setFont(8, 'normal', [40,40,50]);
+        let x = ml + 2;
+        cols.forEach((c, i) => {
+          pdf.text(String(c).substring(0, 35), x, y+5);
+          x += widths[i];
+        });
+        y += 6.5;
+      };
+
+      const tableTotal = (cols, widths) => {
+        hLine(y, 180, 180, 200);
+        y += 1;
+        fillRect(ml, y, cW, 7, 238,242,255);
+        setFont(8.5, 'bold', [67,56,202]);
+        let x = ml + 2;
+        cols.forEach((c, i) => { pdf.text(String(c), x, y+5); x += widths[i]; });
+        y += 9;
+      };
+
+      // ── INCOME TABLE ──────────────────────────────────────────
+      if (reports.incomes && reports.incomes.length > 0) {
+        sectionHeader('INCOME DETAILS', reports.incomes.length);
+        const w = [22, 85, 35, 38];
+        tableHeader(['Mode', 'Description', 'Amount', 'Time'], w);
+        reports.incomes.forEach((r, i) => tableRow([r.payment_mode, r.description || '-', `Rs.${r.amount}`, r.date.split(' ').slice(1).join(' ')], w, i%2===1));
+        tableTotal(['TOTAL', '', `Rs.${reports.incomes.reduce((s,r)=>s+r.amount,0).toFixed(2)}`, ''], w);
       }
-      
-      // Generate filename with date
-      const filename = `Daily_Report_${selectedDate.replace(/-/g, '')}.pdf`;
-      
-      // Download PDF
-      pdf.save(filename);
-    } catch (error) {
-      console.error('PDF generation failed:', error);
-      alert(`PDF download failed: ${error.message}. Please try again.`);
+
+      // ── EXPENSE TABLE ─────────────────────────────────────────
+      if (reports.expenses && reports.expenses.length > 0) {
+        sectionHeader('EXPENSE DETAILS', reports.expenses.length);
+        const w = [55, 50, 35, 40];
+        tableHeader(['Item', 'Vendor / Status', 'Amount', 'Time'], w);
+        reports.expenses.forEach((r, i) => tableRow([r.item_name, r.mahajan ? `${r.mahajan} (${r.status})` : r.status, `Rs.${r.amount}`, r.date.split(' ').slice(1).join(' ')], w, i%2===1));
+        tableTotal(['TOTAL', '', `Rs.${reports.expenses.reduce((s,r)=>s+r.amount,0).toFixed(2)}`, ''], w);
+      }
+
+      // ── STAFF TABLE ───────────────────────────────────────────
+      const staffAdv = (reports.staff || []).filter(r => r.txn_type === 'Advance' || r.txn_type === 'Settle');
+      if (staffAdv.length > 0) {
+        sectionHeader('STAFF PAYMENT DETAILS', staffAdv.length);
+        const w = [40, 50, 22, 28, 40];
+        tableHeader(['Staff Name', 'Note', 'Type', 'Amount', 'Time'], w);
+        staffAdv.forEach((r, i) => tableRow([r.staff_name, r.description || '-', r.txn_type, `Rs.${r.amount}`, r.date.split(' ').slice(1).join(' ')], w, i%2===1));
+        tableTotal(['TOTAL', '', '', `Rs.${staffAdv.reduce((s,r)=>s+r.amount,0).toFixed(2)}`, ''], w);
+      }
+
+      // ── PRINCIPLE TABLE ───────────────────────────────────────
+      if (reports.principles && reports.principles.length > 0) {
+        sectionHeader('PRINCIPLE DETAILS', reports.principles.length);
+        const w = [35, 100, 45];
+        tableHeader(['Amount', 'Description', 'Time'], w);
+        reports.principles.forEach((r, i) => tableRow([`Rs.${r.amount}`, r.description || '-', r.date.split(' ').slice(1).join(' ')], w, i%2===1));
+        tableTotal([`Rs.${reports.principles.reduce((s,r)=>s+r.amount,0).toFixed(2)}`, 'TOTAL', ''], w);
+      }
+
+      // ── FOOTER ────────────────────────────────────────────────
+      const totalPages = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        fillRect(0, pH - 12, pW, 12, 67, 56, 202);
+        setFont(7, 'normal', [199,210,254]);
+        pdf.text('Powered by Poddar Solutions', ml, pH - 5);
+        pdf.text(`Page ${i} of ${totalPages}`, pW - mr, pH - 5, { align: 'right' });
+      }
+
+      pdf.save(`Daily_Report_${selectedDate.replace(/-/g, '')}.pdf`);
+    } catch (err) {
+      alert('PDF generation failed: ' + err.message);
     } finally {
-      // Always restore button state
       button.disabled = false;
-      button.innerHTML = originalContent;
     }
   };
 
@@ -2093,9 +2251,14 @@ function ReportsPage() {
             </div>
           </div>
           <div style={{borderTop: '2px solid #000', paddingTop: '10px'}}>
-            <p style={{fontSize: '10px', fontWeight: 'bold', marginBottom: '4px', color: '#000'}}>Net Income</p>
-            <p style={{fontSize: '22px', fontWeight: 'bold', color: '#000'}}>₹{stats.net_income}</p>
-            <p style={{fontSize: '8px', color: '#000'}}>Formula: Expense + Staff + Principle - Sale</p>
+            <p style={{fontSize: '10px', fontWeight: 'bold', marginBottom: '4px', color: '#000'}}>Net Daily Sales</p>
+            <p style={{fontSize: '22px', fontWeight: 'bold', color: '#000'}}>Rs.{stats.net_income}</p>
+            <p style={{fontSize: '8px', color: '#555'}}>Net Sale = Expense + Staff + Principle - Sale</p>
+            <p style={{fontSize: '10px', fontWeight: 'bold', marginTop: '8px', color: '#000'}}>
+              Total Income (P&L): {(() => { const ti = stats.total_principle - stats.total_income; return ti >= 0 ? `PROFIT Rs.${ti}` : `LOSS Rs.${Math.abs(ti)}`; })()}
+            </p>
+            <p style={{fontSize: '8px', color: '#555'}}>Formula: Principle - (Cash + Online)</p>
+            <p style={{fontSize: '10px', fontWeight: 'bold', marginTop: '4px', color: '#000'}}>Total Cash in Hand: Rs.{stats.total_income + stats.total_principle}</p>
           </div>
         </div>
           {/* Income Section */}
@@ -2265,8 +2428,8 @@ function ReportsPage() {
           <table className="w-full text-left">
             <thead>
               <tr className="text-zinc-500 border-b border-zinc-100 dark:border-zinc-800 text-sm">
-                {activeTab === 'incomes' && <><th className="pb-3 pl-4">{t('Payment Mode')}</th><th className="pb-3">{t('Details')}</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th></>}
-                {activeTab === 'principles' && <><th className="pb-3 pl-4">Amount</th><th className="pb-3">{t('Details')}</th><th className="pb-3">{t('Date')}</th></>}
+                {activeTab === 'incomes' && <><th className="pb-3 pl-4">{t('Payment Mode')}</th><th className="pb-3">{t('Details')}</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th><th className="pb-3">Edit</th></>}
+                {activeTab === 'principles' && <><th className="pb-3 pl-4">Amount</th><th className="pb-3">{t('Details')}</th><th className="pb-3">{t('Date')}</th><th className="pb-3">Edit</th></>}
                 {activeTab === 'expenses' && <><th className="pb-3 pl-4">{t('Item/Detail')}</th><th className="pb-3">{t('Mahajan/Status')}</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th></>}
                 {activeTab === 'inventory' && <><th className="pb-3 pl-4">Item</th><th className="pb-3">{t('Action')}</th><th className="pb-3">{t('Qty')}</th><th className="pb-3">{t('Date')}</th></>}
                 {activeTab === 'returns' && <><th className="pb-3 pl-4">Item</th><th className="pb-3">{t('Return Qty')}</th><th className="pb-3">{t('Date')}</th></>}
@@ -2278,8 +2441,8 @@ function ReportsPage() {
               {paginatedData.length === 0 && <tr><td colSpan="5" className="py-6 text-center text-zinc-500">{t('No records found.')}</td></tr>}
               {paginatedData.map((row, idx) => (
                 <tr key={idx} className="border-b border-zinc-100 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-950/50">
-                  {activeTab === 'incomes' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.payment_mode}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description || '-'}</td><td className="py-4 font-bold text-emerald-600">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
-                  {activeTab === 'principles' && <><td className="py-4 pl-4 font-bold text-blue-600">₹{row.amount}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description || '-'}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
+                  {activeTab === 'incomes' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.payment_mode}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description || '-'}</td><td className="py-4 font-bold text-emerald-600">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td><td className="py-4"><div className="flex gap-1"><button onClick={() => setEditModal({ isOpen: true, type: 'income', row: {...row} })} className="p-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg hover:scale-105 transition-transform" title="Edit"><Edit size={14}/></button><button onClick={() => handleDelete('income', row.id)} className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:scale-105 transition-transform" title="Delete"><Trash2 size={14}/></button></div></td></>}
+                  {activeTab === 'principles' && <><td className="py-4 pl-4 font-bold text-blue-600">₹{row.amount}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description || '-'}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td><td className="py-4"><div className="flex gap-1"><button onClick={() => setEditModal({ isOpen: true, type: 'principle', row: {...row} })} className="p-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg hover:scale-105 transition-transform" title="Edit"><Edit size={14}/></button><button onClick={() => handleDelete('principle', row.id)} className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:scale-105 transition-transform" title="Delete"><Trash2 size={14}/></button></div></td></>}
                   {activeTab === 'expenses' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.mahajan ? `${row.mahajan} (${row.status})` : `Direct (${row.status})`}</td><td className="py-4 font-bold text-rose-600">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                   {activeTab === 'inventory' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${row.action === 'Add' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{row.action}</span></td><td className="py-4 font-medium dark:text-white">{row.quantity}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                   {activeTab === 'returns' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4 font-medium dark:text-white">{row.quantity}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
@@ -2358,6 +2521,26 @@ function ReportsPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Income/Principle Modal */}
+      {editModal.isOpen && editModal.row && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-center z-[100] p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl border border-zinc-200 dark:border-zinc-800 relative animate-fade-in">
+            <button onClick={() => setEditModal({ isOpen: false, type: null, row: null })} className="absolute top-6 right-6 p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"><X size={20} /></button>
+            <h2 className="text-2xl font-black mb-6 dark:text-white">
+              {editModal.type === 'income' ? 'Edit Income Entry' : 'Edit Principle Entry'}
+            </h2>
+            <form onSubmit={handleEditSave} className="space-y-4">
+              {editModal.type === 'income' && (
+                <UI_Select label="Payment Mode" options={[{label:'Cash', value:'Cash'},{label:'Online', value:'Online'}]} value={editModal.row.payment_mode} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, payment_mode: e.target.value}}))} />
+              )}
+              <UI_Input label="Amount (₹)" type="number" value={editModal.row.amount} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, amount: e.target.value}}))} required />
+              <UI_Input label="Details (Optional)" value={editModal.row.description || ''} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, description: e.target.value}}))} />
+              <div className="pt-2"><UI_Button type="submit" variant="primary">Save Changes</UI_Button></div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -3286,28 +3469,19 @@ function ShopSettingsPage() {
         </form>
         
         <div className="mt-8 pt-8 border-t border-zinc-100 dark:border-zinc-800">
-           <h3 className="text-xl font-bold dark:text-white mb-4">Database Backup</h3>
-           <p className="text-sm text-zinc-500 mb-4">Aap apna pura data (Inventory, Orders, Khata) backup kar sakte hain aur baad mein restore (import) bhi kar sakte hain.</p>
-           <div className="flex flex-col sm:flex-row gap-4">
-              <button type="button" onClick={() => window.location.href = `${API_BASE_URL}/api/database/export`} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-2xl transition-all">
-                  Export Database (Download Backup)
-              </button>
-              <label className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-2xl transition-all cursor-pointer text-center">
-                  Import Database (Restore Backup)
-                  <input type="file" accept=".db" className="hidden" onChange={async (e) => {
-                      const file = e.target.files[0];
-                      if(!file) return;
-                      if(!window.confirm("Warning: Ye pura purana data mita dega aur backup restore karega. Continue?")) return;
-                      const fd = new FormData(); fd.append('file', file);
-                      try {
-                          const res = await fetch(`${API_BASE_URL}/api/database/import`, {method:'POST', body:fd});
-                          const data = await res.json();
-                          if(res.ok) { alert(data.message || "Imported! System reload is advised."); window.location.reload(); }
-                          else { alert(data.error || "Import fail."); }
-                      } catch(err) { alert("Error connecting to server."); }
-                  }} />
-              </label>
-           </div>
+           <h3 className="text-xl font-bold dark:text-white mb-2">Reset Today's Entry</h3>
+           <p className="text-sm text-zinc-500 mb-4">Sirf aaj ka income, principle aur expense entries delete ho jayenge. Baaki data safe rahega.</p>
+           <button type="button" onClick={async () => {
+             if (!window.confirm("Kya aap sach mein aaj ka saara entry (Income, Principle, Expense) reset karna chahte hain? Ye action undo nahi ho sakta.")) return;
+             try {
+               const res = await shopFetch(`${API_BASE_URL}/api/settings/reset-today`, { method: 'POST' });
+               const data = await res.json();
+               if (res.ok) { alert(data.message || "Aaj ka entry reset ho gaya!"); }
+               else { alert(data.error || "Reset fail ho gaya."); }
+             } catch(err) { alert("Server se connection fail."); }
+           }} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-2xl transition-all active:scale-95">
+             Reset Today's Entry
+           </button>
         </div>
         <div className="mt-8 pt-8 border-t border-zinc-100 dark:border-zinc-800">
            <h3 className="text-xl font-bold dark:text-white mb-4">Change Password</h3>

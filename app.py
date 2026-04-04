@@ -886,6 +886,22 @@ def add_income():
     return jsonify({"message": "Income recorded!"}), 201
 
 
+@app.route('/api/income/<int:id>', methods=['PUT', 'DELETE'])
+def edit_delete_income(id):
+    sid = get_shop_id()
+    income = DailyIncome.query.filter_by(id=id, shop_id=sid).first_or_404()
+    if request.method == 'DELETE':
+        db.session.delete(income)
+        db.session.commit()
+        return jsonify({"message": "Income entry deleted!"})
+    data = request.json
+    income.payment_mode = data.get('payment_mode', income.payment_mode)
+    income.amount = float(data.get('amount', income.amount))
+    income.description = data.get('description', income.description)
+    db.session.commit()
+    return jsonify({"message": "Income updated!"})
+
+
 @app.route('/api/principle', methods=['POST'])
 def add_principle():
     sid = get_shop_id()
@@ -896,6 +912,21 @@ def add_principle():
     ))
     db.session.commit()
     return jsonify({"message": "Principle recorded!"}), 201
+
+
+@app.route('/api/principle/<int:id>', methods=['PUT', 'DELETE'])
+def edit_delete_principle(id):
+    sid = get_shop_id()
+    principle = DailyPrinciple.query.filter_by(id=id, shop_id=sid).first_or_404()
+    if request.method == 'DELETE':
+        db.session.delete(principle)
+        db.session.commit()
+        return jsonify({"message": "Principle entry deleted!"})
+    data = request.json
+    principle.amount = float(data.get('amount', principle.amount))
+    principle.description = data.get('description', principle.description)
+    db.session.commit()
+    return jsonify({"message": "Principle updated!"})
 
 
 # ============================================================
@@ -1425,6 +1456,35 @@ def backup_stats():
         return jsonify(stats), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ============================================================
+#  RESET TODAY'S ENTRY
+# ============================================================
+
+@app.route('/api/settings/reset-today', methods=['POST'])
+def reset_today_entry():
+    """Sirf aaj ka income, principle, aur expense entries delete karo"""
+    sid = get_shop_id()
+    today = datetime.today().date()
+
+    DailyIncome.query.filter(
+        DailyIncome.shop_id == sid,
+        db.func.date(DailyIncome.date_time) == today
+    ).delete(synchronize_session=False)
+
+    DailyPrinciple.query.filter(
+        DailyPrinciple.shop_id == sid,
+        db.func.date(DailyPrinciple.date_time) == today
+    ).delete(synchronize_session=False)
+
+    DailyExpense.query.filter(
+        DailyExpense.shop_id == sid,
+        db.func.date(DailyExpense.date_time) == today
+    ).delete(synchronize_session=False)
+
+    db.session.commit()
+    return jsonify({"message": "Aaj ka saara entry reset ho gaya!"})
 
 
 # ============================================================

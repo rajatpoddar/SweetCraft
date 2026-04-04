@@ -471,6 +471,56 @@ def stock_out(id):
 @app.route('/api/staff', methods=['GET', 'POST'])
 def manage_staff():
     sid = get_shop_id()
+    if not sid:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if request.method == 'POST':
+        data = request.get_json()
+        new_staff = Staff(
+            shop_id=sid,
+            name=data['name'],
+            mobile=data['mobile'],
+            address=data.get('address', ''),
+            payment_type=data['payment_type'],
+            base_salary=float(data['base_salary']) if data.get('base_salary') else 0.0,
+            daily_wage=float(data['daily_wage']) if data.get('daily_wage') else 0.0,
+            balance=float(data.get('balance', 0.0))
+        )
+        db.session.add(new_staff)
+        db.session.commit()
+        return jsonify({"message": "Staff added"}), 201
+
+    client_date_str = request.args.get('date')
+    today = datetime.strptime(client_date_str, '%Y-%m-%d').date() if client_date_str else (datetime.utcnow() + timedelta(hours=5, minutes=30)).date()
+
+    staff_list = Staff.query.filter_by(shop_id=sid).all()
+    result = []
+    for s in staff_list:
+        att = Attendance.query.filter_by(staff_id=s.id, date=today).first()
+        
+        # Aaj ka Advance payment check karna
+        today_paid_record = Ledger.query.filter(
+            Ledger.staff_id == s.id,
+            Ledger.txn_type == 'Advance',
+            db.func.date(Ledger.date_time) == today
+        ).first()
+        
+        today_paid = today_paid_record is not None
+
+        result.append({
+            "id": s.id, 
+            "name": s.name, 
+            "mobile": s.mobile, 
+            "address": s.address,
+            "payment_type": s.payment_type, 
+            "base_salary": s.base_salary,
+            "daily_wage": s.daily_wage, 
+            "balance": s.balance,
+            "today_attendance": att.status if att else None,
+            "today_paid": today_paid
+        })
+    return jsonify(result)
+    sid = get_shop_id()
     if request.method == 'POST':
         data = request.json
         pay_type = data.get('payment_type', 'Daily')

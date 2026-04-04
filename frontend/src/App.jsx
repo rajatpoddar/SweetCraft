@@ -24,8 +24,10 @@ const validatePhone = (value) => {
   return cleaned.slice(0, 10);
 };
 
-const isValidPhone = (value) => {
-  return /^\d{10}$/.test(value);
+const isValidPhone = (phone) => {
+  // Sirf 10 numbers allow karega
+  const phoneRegex = /^\d{10}$/;
+  return phoneRegex.test(phone);
 };
 
 // Multi-tenant: Har request mein X-Shop-Username header add karna
@@ -846,14 +848,30 @@ function StaffPage() {
     Promise.all([fetchStaff(), fetchTodayPay()]).finally(() => setLoading(false));
   }, []);
 
-  const handleAddStaff = (e) => {
+ const handleAddStaff = (e) => {
     e.preventDefault();
+    
+    // 10-digit Phone Validation
+    if (formData.mobile && !isValidPhone(formData.mobile)) {
+      return alert("Mobile number strictly 10 digits ka hona chahiye.");
+    }
+    
     if (isSubmitting) return;
     setIsSubmitting(true);
-    shopFetch(API_BASE_URL + '/api/staff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) })
+    
+    shopFetch(API_BASE_URL + '/api/staff', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify(formData) 
+    })
       .then(() => { 
         setFormData({ name: '', mobile: '', address: '', payment_type: 'Daily', base_salary: '' }); 
         fetchStaff(); 
+        alert("Staff added successfully!"); // Success Alert
+      })
+      .catch(err => {
+        console.error("Error adding staff:", err);
+        alert("Error adding staff.");
       })
       .finally(() => setIsSubmitting(false));
   };
@@ -884,22 +902,27 @@ function StaffPage() {
 
   const submitEditStaff = (e) => {
     e.preventDefault();
+    
+    // 10-digit Phone Validation
+    if (editModal.staff.mobile && !isValidPhone(editModal.staff.mobile)) {
+      return alert("Mobile number strictly 10 digits ka hona chahiye.");
+    }
+    
     if (isSubmitting) return;
     setIsSubmitting(true);
+    
     shopFetch(`${API_BASE_URL}/api/staff/${editModal.staff.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: editModal.staff.name,
-        mobile: editModal.staff.mobile,
-        address: editModal.staff.address,
-        payment_type: editModal.staff.payment_type,
-        base_salary: editModal.staff.base_salary
+      body: JSON.stringify(editModal.staff)
+    })
+      .then(() => {
+        setEditModal({ open: false, staff: null });
+        fetchStaff();
+        alert("Staff updated successfully!");
       })
-    }).then(() => {
-      setEditModal({ isOpen: false, staff: null });
-      fetchStaff();
-    }).finally(() => setIsSubmitting(false));
+      .catch(err => alert("Error updating staff"))
+      .finally(() => setIsSubmitting(false));
   };
 
   const handleViewHistory = (staff) => {
@@ -1020,7 +1043,16 @@ function StaffPage() {
           <div key={staff.id} className="group bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2rem] p-6 flex flex-col justify-between shadow-sm">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">{staff.name}</h3>
+                <h3 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight flex items-center gap-2">
+  {staff.name}
+  {staff.today_paid && (
+    <CheckCircle 
+      size={20} 
+      className="text-emerald-500" 
+      title="Aaj ka payment ho gaya hai" 
+    />
+  )}
+</h3>
                 {staff.mobile && <a href={`tel:${staff.mobile}`} className="text-blue-500 font-medium mt-1 inline-flex items-center gap-1 hover:underline">📞 {staff.mobile}</a>}
                 <p className="text-zinc-500 font-medium mt-1">₹{staff.base_salary} <span className="text-xs">/{staff.payment_type === 'Daily' ? 'day' : 'mo'}</span></p>
               </div>
@@ -1193,32 +1225,34 @@ function OrdersPage() {
     }
   };
 
-  const handleAddOrder = (e) => {
+ const handleAddOrder = (e) => {
     e.preventDefault();
-    if(selectedItems.length === 0) return alert("Please add at least one item to the order.");
     
-    let finalDiscount = 0;
-    if(calculatedTotal > Number(formData.total_amount)) {
-        finalDiscount = calculatedTotal - Number(formData.total_amount);
+    // 10-digit Phone Validation
+    if (formData.phone && !isValidPhone(formData.phone)) {
+      return alert("Phone number strictly 10 digits ka hona chahiye.");
     }
     
-    // Fix: Convert empty advance_paid to 0
-    const advancePaid = formData.advance_paid === '' || formData.advance_paid === null ? 0 : Number(formData.advance_paid);
+    if(selectedItems.length === 0) {
+      return alert("Please add at least one item to the order.");
+    }
     
-    const submitData = { 
-      ...formData, 
-      advance_paid: advancePaid,
-      items_details: selectedItems.join(', '), 
-      discount: finalDiscount 
-    };
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     
-    shopFetch(API_BASE_URL + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(submitData) })
-      .then(() => { 
-        setFormData({ customer_name: '', phone: '', address: '', delivery_date: '', total_amount: '', advance_paid: '' }); 
+    const orderData = { ...formData, items: selectedItems };
+    shopFetch(API_BASE_URL + '/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(orderData)
+    })
+      .then(() => {
+        setFormData({ customer_name: '', phone: '', delivery_date: '', total_amount: 0, advance_payment: 0 });
         setSelectedItems([]);
-        setCalculatedTotal(0);
-        fetchOrders(); 
-      });
+        fetchOrders();
+        alert("Order added successfully!");
+      })
+      .finally(() => setIsSubmitting(false));
   };
 
   const handleStatusChange = (id, newStatus) => {
@@ -1374,8 +1408,14 @@ function OrdersPage() {
             required 
           />
           <div className="md:col-span-2"><UI_Input label={t('Address')} value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} /></div>
-          <UI_Input label={t('Delivery Date')} type="date" value={formData.delivery_date} onChange={e => setFormData({ ...formData, delivery_date: e.target.value })} required />
-          
+          <UI_Input 
+  label={t('Delivery Date')} 
+  type="date" 
+  value={formData.delivery_date} 
+  onChange={e => setFormData({ ...formData, delivery_date: e.target.value })} 
+  min={new Date().toISOString().split("T")[0]} 
+  required 
+/>
           <div className="lg:col-span-3 flex flex-col md:flex-row gap-4 items-end">
              <div className="flex-1 w-full">
                 <UI_Input label={t('Search/Select Menu Item (Or type custom)')} list="order-menu-items" placeholder="Search item..." value={currentItem} onChange={e=>handleItemSelect(e.target.value)} />

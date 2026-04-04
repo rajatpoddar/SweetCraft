@@ -1896,6 +1896,7 @@ function ReportsPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [stats, setStats] = useState({ total_income: 0, total_cash: 0, total_online: 0, total_expense: 0, total_staff_pay: 0, total_principle: 0, net_income: 0 });
   const [editModal, setEditModal] = useState({ isOpen: false, type: null, row: null });
+  const [shopSettings, setShopSettings] = useState({ shop_name: localStorage.getItem('shop_name') || 'SweetCraft', tagline: '', phone: '', address: '' });
   
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
@@ -1913,6 +1914,9 @@ function ReportsPage() {
   useEffect(() => { 
     fetchReports(selectedDate); 
     fetchStats(selectedDate);
+    shopFetch(`${API_BASE_URL}/api/settings`).then(r => r.json()).then(d => {
+      if (d.shop_name) setShopSettings(d);
+    }).catch(() => {});
   }, [selectedDate]);
 
   const handleTabChange = (id) => {
@@ -1923,7 +1927,10 @@ function ReportsPage() {
   const handleEditSave = async (e) => {
     e.preventDefault();
     const { type, row } = editModal;
-    const endpoint = type === 'income' ? `/api/income/${row.id}` : `/api/principle/${row.id}`;
+    let endpoint;
+    if (type === 'income') endpoint = `/api/income/${row.id}`;
+    else if (type === 'principle') endpoint = `/api/principle/${row.id}`;
+    else if (type === 'staff') endpoint = `/api/staff/ledger/${row.id}`;
     await shopFetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1936,7 +1943,10 @@ function ReportsPage() {
 
   const handleDelete = async (type, id) => {
     if (!window.confirm('Kya aap is entry ko delete karna chahte hain?')) return;
-    const endpoint = type === 'income' ? `/api/income/${id}` : `/api/principle/${id}`;
+    let endpoint;
+    if (type === 'income') endpoint = `/api/income/${id}`;
+    else if (type === 'principle') endpoint = `/api/principle/${id}`;
+    else if (type === 'staff') endpoint = `/api/staff/ledger/${id}`;
     await shopFetch(`${API_BASE_URL}${endpoint}`, { method: 'DELETE' });
     fetchReports(selectedDate);
     fetchStats(selectedDate);
@@ -1975,16 +1985,29 @@ function ReportsPage() {
         pdf.line(ml, fy, pW - mr, fy);
       };
 
+      // Hindi/Devanagari text ko PDF-safe banao (jsPDF standard fonts Unicode support nahi karte)
+      const safePdfText = (str) => {
+        if (!str) return '-';
+        // Check if string has non-Latin characters (Hindi/Devanagari range: \u0900-\u097F)
+        const hasDevanagari = /[\u0900-\u097F]/.test(str);
+        if (!hasDevanagari) return String(str).substring(0, 35);
+        // Devanagari text ko romanize nahi kar sakte, isliye brackets mein note karo
+        // aur Latin characters retain karo
+        return String(str).replace(/[\u0900-\u097F\u200C\u200D]+/g, (match) => `[${match}]`).substring(0, 35);
+      };
+
       // ── HEADER BAND ──────────────────────────────────────────
-      fillRect(0, 0, pW, 32, 67, 56, 202); // indigo-700
+      fillRect(0, 0, pW, 38, 67, 56, 202); // indigo-700
+      setFont(11, 'bold', [199, 210, 254]); // indigo-200
+      pdf.text(shopSettings.shop_name || 'SweetCraft', ml, 10);
       setFont(18, 'bold', [255, 255, 255]);
-      pdf.text('Daily Business Report', ml, 14);
+      pdf.text('Daily Business Report', ml, 20);
       setFont(9, 'normal', [199, 210, 254]); // indigo-200
       const dateStr = new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-      pdf.text(dateStr, ml, 22);
+      pdf.text(dateStr, ml, 28);
       setFont(8, 'normal', [199, 210, 254]);
-      pdf.text(`Generated: ${new Date().toLocaleString('en-IN')}`, pW - mr, 22, { align: 'right' });
-      y = 40;
+      pdf.text(`Generated: ${new Date().toLocaleString('en-IN')}`, pW - mr, 28, { align: 'right' });
+      y = 46;
 
       // ── SUMMARY CARDS ─────────────────────────────────────────
       const netSale = stats.net_income;
@@ -2060,7 +2083,7 @@ function ReportsPage() {
         setFont(8, 'normal', [40,40,50]);
         let x = ml + 2;
         cols.forEach((c, i) => {
-          pdf.text(String(c).substring(0, 35), x, y+5);
+          pdf.text(safePdfText(c), x, y+5);
           x += widths[i];
         });
         y += 6.5;
@@ -2224,7 +2247,8 @@ function ReportsPage() {
         
         {/* Print Header */}
         <div style={{textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #000', paddingBottom: '15px'}}>
-          <h1 style={{fontSize: '24px', fontWeight: 'bold', margin: '0 0 5px 0', color: '#000'}}>Daily Business Report</h1>
+          <h1 style={{fontSize: '20px', fontWeight: 'bold', margin: '0 0 3px 0', color: '#000'}}>{shopSettings.shop_name || 'SweetCraft'}</h1>
+          <h2 style={{fontSize: '16px', fontWeight: 'bold', margin: '0 0 5px 0', color: '#000'}}>Daily Business Report</h2>
           <p style={{fontSize: '12px', margin: '0', color: '#000'}}>Date: {new Date(selectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
         </div>
 
@@ -2433,7 +2457,7 @@ function ReportsPage() {
                 {activeTab === 'expenses' && <><th className="pb-3 pl-4">{t('Item/Detail')}</th><th className="pb-3">{t('Mahajan/Status')}</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th></>}
                 {activeTab === 'inventory' && <><th className="pb-3 pl-4">Item</th><th className="pb-3">{t('Action')}</th><th className="pb-3">{t('Qty')}</th><th className="pb-3">{t('Date')}</th></>}
                 {activeTab === 'returns' && <><th className="pb-3 pl-4">Item</th><th className="pb-3">{t('Return Qty')}</th><th className="pb-3">{t('Date')}</th></>}
-                {activeTab === 'staff' && <><th className="pb-3 pl-4">{t('Staff Name')}</th><th className="pb-3">{t('Details')}</th><th className="pb-3">Type</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th></>}
+                {activeTab === 'staff' && <><th className="pb-3 pl-4">{t('Staff Name')}</th><th className="pb-3">{t('Details')}</th><th className="pb-3">Type</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th><th className="pb-3">Edit</th></>}
                 {activeTab === 'customers' && <><th className="pb-3 pl-4">{t('Customer Name')}</th><th className="pb-3">{t('Transaction')}</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th></>}
               </tr>
             </thead>
@@ -2446,7 +2470,7 @@ function ReportsPage() {
                   {activeTab === 'expenses' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.mahajan ? `${row.mahajan} (${row.status})` : `Direct (${row.status})`}</td><td className="py-4 font-bold text-rose-600">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                   {activeTab === 'inventory' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${row.action === 'Add' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{row.action}</span></td><td className="py-4 font-medium dark:text-white">{row.quantity}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                   {activeTab === 'returns' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4 font-medium dark:text-white">{row.quantity}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
-                  {activeTab === 'staff' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.staff_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description}</td><td className="py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${row.txn_type === 'Advance' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{row.txn_type}</span></td><td className="py-4 font-bold dark:text-white">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
+                  {activeTab === 'staff' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.staff_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description}</td><td className="py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${row.txn_type === 'Advance' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{row.txn_type}</span></td><td className="py-4 font-bold dark:text-white">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td><td className="py-4"><div className="flex gap-1"><button onClick={() => setEditModal({ isOpen: true, type: 'staff', row: {...row} })} className="p-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg hover:scale-105 transition-transform" title="Edit"><Edit size={14}/></button><button onClick={() => handleDelete('staff', row.id)} className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:scale-105 transition-transform" title="Delete"><Trash2 size={14}/></button></div></td></>}
                   {activeTab === 'customers' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.customer_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.txn_type}</td><td className="py-4 font-bold dark:text-white">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                 </tr>
               ))}
@@ -2528,11 +2552,16 @@ function ReportsPage() {
           <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl border border-zinc-200 dark:border-zinc-800 relative animate-fade-in">
             <button onClick={() => setEditModal({ isOpen: false, type: null, row: null })} className="absolute top-6 right-6 p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"><X size={20} /></button>
             <h2 className="text-2xl font-black mb-6 dark:text-white">
-              {editModal.type === 'income' ? 'Edit Income Entry' : 'Edit Principle Entry'}
+              {editModal.type === 'income' ? 'Edit Income Entry' : editModal.type === 'staff' ? 'Edit Staff Payment' : 'Edit Principle Entry'}
             </h2>
             <form onSubmit={handleEditSave} className="space-y-4">
               {editModal.type === 'income' && (
                 <UI_Select label="Payment Mode" options={[{label:'Cash', value:'Cash'},{label:'Online', value:'Online'}]} value={editModal.row.payment_mode} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, payment_mode: e.target.value}}))} />
+              )}
+              {editModal.type === 'staff' && (
+                <div className="px-4 py-3 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-semibold text-zinc-600 dark:text-zinc-300">
+                  Staff: <span className="text-zinc-900 dark:text-white font-bold">{editModal.row.staff_name}</span> &nbsp;|&nbsp; Type: <span className={`font-bold ${editModal.row.txn_type === 'Advance' ? 'text-red-600' : 'text-emerald-600'}`}>{editModal.row.txn_type}</span>
+                </div>
               )}
               <UI_Input label="Amount (₹)" type="number" value={editModal.row.amount} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, amount: e.target.value}}))} required />
               <UI_Input label="Details (Optional)" value={editModal.row.description || ''} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, description: e.target.value}}))} />

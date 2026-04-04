@@ -929,6 +929,32 @@ def edit_delete_principle(id):
     return jsonify({"message": "Principle updated!"})
 
 
+@app.route('/api/staff/ledger/<int:id>', methods=['PUT', 'DELETE'])
+def edit_delete_staff_ledger(id):
+    sid = get_shop_id()
+    # Verify ledger belongs to a staff of this shop
+    ledger = Ledger.query.get_or_404(id)
+    staff = Staff.query.filter_by(id=ledger.staff_id, shop_id=sid).first_or_404()
+    if request.method == 'DELETE':
+        # Reverse the balance effect
+        if ledger.txn_type == 'Advance':
+            staff.balance += ledger.amount  # advance diya tha, wapas add karo
+        db.session.delete(ledger)
+        db.session.commit()
+        return jsonify({"message": "Staff ledger entry deleted!"})
+    data = request.json
+    old_amount = ledger.amount
+    new_amount = float(data.get('amount', ledger.amount))
+    # Adjust staff balance for amount change (only for Advance type)
+    if ledger.txn_type == 'Advance':
+        staff.balance += old_amount   # reverse old
+        staff.balance -= new_amount   # apply new
+    ledger.amount = new_amount
+    ledger.description = data.get('description', ledger.description)
+    db.session.commit()
+    return jsonify({"message": "Staff ledger entry updated!"})
+
+
 # ============================================================
 #  REPORTS
 # ============================================================

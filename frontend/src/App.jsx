@@ -575,7 +575,7 @@ function Dashboard() {
                  <span className="bg-white/20 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-white/10">💰 Sale: ₹{stats.total_income}</span>
                  <span className="bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-black/5">📦 Expense: ₹{stats.total_expense}</span>
                  <span className="bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-black/5">👥 Staff: ₹{stats.total_staff_pay}</span>
-                 <span className="bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-black/5">🏦 Principle: ₹{stats.total_principle}</span>
+                 <span className="bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-black/5">🏦 Direct Income: ₹{stats.total_principle}</span>
               </div>
               <p className="text-emerald-50/80 text-xs mt-3 font-medium">Net Sale = Expense + Staff + Principle - Sale</p>
               <p className="text-emerald-50/80 text-xs mt-1 font-medium">Total Cash in Hand: ₹{stats.total_income + stats.total_principle}</p>
@@ -598,7 +598,7 @@ function Dashboard() {
             </form>
 
             <form onSubmit={handlePrincipleSubmit} className="bg-white/10 p-5 rounded-[1.5rem] border border-white/20 backdrop-blur-md flex flex-col gap-3">
-               <h4 className="font-bold text-[11px] uppercase tracking-widest text-emerald-50 mb-1">{t('Record Principle')}</h4>
+               <h4 className="font-bold text-[11px] uppercase tracking-widest text-emerald-50 mb-1">{t('Record Direct Income')}</h4>
                <input type="number" placeholder={t('₹ Amount')} value={principleForm.amount} onChange={e=>setPrincipleForm({...principleForm, amount: e.target.value})} className="bg-white/20 text-white placeholder-white/60 text-sm rounded-xl px-3 py-2 outline-none border border-white/10" required />
                <div className="flex gap-2">
                  <input type="text" placeholder={t('Detail (Optional)')} value={principleForm.description} onChange={e=>setPrincipleForm({...principleForm, description: e.target.value})} className="bg-white/20 text-white placeholder-white/60 text-sm rounded-xl px-3 py-2 w-full outline-none border border-white/10" />
@@ -610,10 +610,10 @@ function Dashboard() {
 
       {/* Row 1: Finance Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <MetricCard title="Total Daily Income" value={`₹${stats.total_income}`} sub={`C: ₹${stats.total_cash} | O: ₹${stats.total_online}`} icon={<IndianRupee size={24} />} gradient="from-purple-400 to-indigo-500" />
+        <MetricCard title="Total Principle" value={`₹${stats.total_income}`} sub={`C: ₹${stats.total_cash} | O: ₹${stats.total_online}`} icon={<IndianRupee size={24} />} gradient="from-purple-400 to-indigo-500" />
         <MetricCard title="Total Daily Expense" value={`₹${stats.total_expense}`} icon={<ReceiptText size={24} />} gradient="from-red-400 to-rose-600" />
         <MetricCard title="Staff Pay (Today)" value={`₹${stats.total_staff_pay}`} icon={<Users size={24} />} gradient="from-orange-400 to-rose-500" />
-        <MetricCard title="Total Principle" value={`₹${stats.total_principle}`} icon={<Briefcase size={24} />} gradient="from-blue-400 to-indigo-500" />
+        <MetricCard title="Total Direct Income" value={`₹${stats.total_principle}`} icon={<Briefcase size={24} />} gradient="from-blue-400 to-indigo-500" />
       </div>
 
       {/* Row 2: Operation Metrics */}
@@ -1217,6 +1217,7 @@ function OrdersPage() {
   const [currentQty, setCurrentQty] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
   const [calculatedTotal, setCalculatedTotal] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [formData, setFormData] = useState({ customer_name: '', phone: '', address: '', delivery_date: '', total_amount: '', advance_paid: '' });
   const [deliveryModal, setDeliveryModal] = useState({ isOpen: false, order: null, paidNow: '' });
@@ -1254,34 +1255,55 @@ function OrdersPage() {
     }
   };
 
- const handleAddOrder = (e) => {
+ const handleAddOrder = async (e) => {
     e.preventDefault();
     
-    // 10-digit Phone Validation
     if (formData.phone && !isValidPhone(formData.phone)) {
       return alert("Phone number strictly 10 digits ka hona chahiye.");
     }
-    
-    if(selectedItems.length === 0) {
-      return alert("Please add at least one item to the order.");
+    if (selectedItems.length === 0) {
+      return alert("Kripya kam se kam ek item add karein.");
     }
-    
+    if (!formData.delivery_date) {
+      return alert("Delivery date select karein.");
+    }
+    if (!formData.total_amount || Number(formData.total_amount) <= 0) {
+      return alert("Total amount enter karein.");
+    }
     if (isSubmitting) return;
     setIsSubmitting(true);
-    
-    const orderData = { ...formData, items: selectedItems };
-    shopFetch(API_BASE_URL + '/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData)
-    })
-      .then(() => {
-        setFormData({ customer_name: '', phone: '', delivery_date: '', total_amount: 0, advance_payment: 0 });
-        setSelectedItems([]);
-        fetchOrders();
-        alert("Order added successfully!");
-      })
-      .finally(() => setIsSubmitting(false));
+
+    const orderData = {
+      customer_name: formData.customer_name,
+      phone: formData.phone || '',
+      address: formData.address || '',
+      delivery_date: formData.delivery_date,
+      total_amount: Number(formData.total_amount),
+      advance_paid: Number(formData.advance_paid) || 0,
+      discount: 0,
+      items_details: selectedItems.join(', '),
+    };
+
+    try {
+      const res = await shopFetch(API_BASE_URL + '/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderData)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Server error: ${res.status}`);
+      }
+      setFormData({ customer_name: '', phone: '', address: '', delivery_date: '', total_amount: '', advance_paid: '' });
+      setSelectedItems([]);
+      setCalculatedTotal(0);
+      fetchOrders();
+      alert("Order successfully book ho gaya!");
+    } catch (err) {
+      alert("Order save nahi hua: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleStatusChange = (id, newStatus) => {
@@ -1312,78 +1334,195 @@ function OrdersPage() {
   };
 
   const printBill = async (order) => {
-    // Dynamic shop settings fetch karo bill ke liye
-    let s = { shop_name: 'SweetCraft', tagline: 'Premium Sweets & Snacks', phone: '+91 98765 43210', phone2: '', address: 'Main Market', city: 'Deoghar, Jharkhand', footer_note: 'Thank you for your business!', gstin: '', upi_id: '' };
+    let s = { shop_name: 'SweetCraft', tagline: 'Premium Sweets & Snacks', phone: '', phone2: '', address: 'Main Market', city: 'Deoghar, Jharkhand', footer_note: 'धन्यवाद! पुनः पधारें।', gstin: '', upi_id: '' };
     try { const r = await shopFetch(`${API_BASE_URL}/api/settings`); if (r.ok) s = { ...s, ...(await r.json()) }; } catch(e) {}
-    const itemsList = order.items_details.split(',').map(item => `<li>${item.trim()}</li>`).join('');
+
+    // Items parse karo - "Name xQty @Rate" format try karo, warna sirf name
+    const rawItems = order.items_details.split(',').map(i => i.trim()).filter(Boolean);
+    const itemRows = rawItems.map((itm, idx) => {
+      // App ka format: "ItemName (Qty Unit) - ₹TotalAmount"
+      // e.g. "एनी (20 pc/kg) - ₹200"  or  "Kaju Katli (2 kg) - ₹1600"
+      const appFmt = itm.match(/^(.+?)\s*\((\d+\.?\d*)\s*([^)]*)\)\s*-\s*[₹Rs.]*\s*(\d+\.?\d*)$/);
+      if (appFmt) {
+        const name = appFmt[1].trim();
+        const qty  = appFmt[2];
+        const unit = appFmt[3].trim();
+        const totalAmt = appFmt[4];
+        // Rate = totalAmt / qty
+        const rate = qty && parseFloat(qty) > 0
+          ? (parseFloat(totalAmt) / parseFloat(qty)).toFixed(0)
+          : '';
+        return { sn: String(idx + 1).padStart(2, '0'), name: `${name} (${unit})`, qty, rate, amt: totalAmt };
+      }
+      // Fallback formats: "Name xQty @Rate" or plain name
+      const xFmt = itm.match(/^(.+?)\s*[xX×]\s*(\d+\.?\d*)\s*(?:@\s*(\d+\.?\d*))?$/);
+      if (xFmt) {
+        const qty = xFmt[2], rate = xFmt[3] || '';
+        return { sn: String(idx + 1).padStart(2, '0'), name: xFmt[1].trim(), qty, rate,
+          amt: (qty && rate) ? (parseFloat(qty) * parseFloat(rate)).toFixed(0) : '' };
+      }
+      return { sn: String(idx + 1).padStart(2, '0'), name: itm, qty: '', rate: '', amt: '' };
+    });
+
+    const due = order.total_amount - order.advance_paid - (order.discount || 0);
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
       <html>
         <head>
-          <title>Invoice - ${order.customer_name}</title>
+          <meta charset="UTF-8"/>
+          <title>कैश मेमो - ${order.customer_name}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com"/>
+          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700;900&display=swap"/>
           <style>
-            body { font-family: 'Segoe UI', sans-serif; padding: 20px; color: #333; max-width: 800px; margin: auto; }
-            .header { text-align: center; border-bottom: 2px solid #6b21a8; padding-bottom: 15px; margin-bottom: 20px; }
-            .header h1 { margin: 0; color: #6b21a8; font-size: 32px; letter-spacing: -1px; }
-            .header .tagline { margin: 4px 0 0; color: #8b5cf6; font-size: 13px; font-weight: 600; }
-            .header .contact { margin: 5px 0 0; color: #666; font-size: 13px; }
-            .details { display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 14px; background: #f9fafb; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
-            .details-col p { margin: 5px 0; }
-            .items-box { margin-bottom: 25px; }
-            .items-box h3 { margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; color: #374151; }
-            .items-box ul { list-style-type: none; padding: 0; margin: 0; }
-            .items-box li { padding: 10px 5px; border-bottom: 1px dashed #d1d5db; font-size: 14px; color: #4b5563; }
-            .totals-container { display: flex; justify-content: flex-end; }
-            .totals { width: 100%; max-width: 320px; border-collapse: collapse; }
-            .totals td { padding: 10px 8px; text-align: right; border-bottom: 1px solid #f3f4f6; font-size: 14px; }
-            .totals td:first-child { text-align: left; font-weight: bold; color: #4b5563; }
-            .due-row td { font-size: 20px; font-weight: 900; color: #dc2626; border-bottom: none; border-top: 2px solid #e5e7eb; padding-top: 15px; }
-            .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
-            @media print { body { padding: 0; } }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: 'Noto Sans Devanagari', 'Mangal', Arial, sans-serif;
+              color: #000;
+              background: #fff;
+              padding: 12px;
+              max-width: 680px;
+              margin: auto;
+              font-size: 13px;
+            }
+            /* ── HEADER ── */
+            .top-label { text-align: center; font-size: 11px; letter-spacing: 2px; margin-bottom: 4px; }
+            .shop-header { display: flex; align-items: center; justify-content: center; gap: 10px; border-top: 3px solid #000; border-bottom: 1px solid #000; padding: 6px 0; margin-bottom: 4px; }
+            .shop-name-box { background: #000; color: #fff; font-size: 26px; font-weight: 900; padding: 2px 12px; letter-spacing: -1px; }
+            .shop-name-rest { font-size: 26px; font-weight: 900; }
+            .shop-sub { text-align: center; font-size: 11px; color: #333; padding: 3px 0; border-bottom: 2px solid #000; }
+            .invoice-row { display: flex; justify-content: space-between; padding: 5px 2px; border-bottom: 1px solid #000; font-size: 12px; }
+            /* ── CUSTOMER INFO ── */
+            .info-section { border: 1px solid #000; padding: 6px 8px; margin: 6px 0; }
+            .info-row { display: flex; align-items: baseline; gap: 4px; margin-bottom: 4px; font-size: 12px; }
+            .info-row:last-child { margin-bottom: 0; }
+            .info-label { font-weight: 700; white-space: nowrap; min-width: 70px; }
+            .info-dots { flex: 1; border-bottom: 1px dotted #555; min-width: 40px; height: 14px; }
+            .info-value { font-size: 12px; min-width: 60px; }
+            /* ── ITEMS TABLE ── */
+            table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+            thead tr { background: #000; color: #fff; }
+            thead th { padding: 5px 4px; font-size: 12px; font-weight: 700; text-align: center; border: 1px solid #000; }
+            thead th.left { text-align: left; }
+            tbody tr td { border: 1px solid #000; padding: 5px 4px; font-size: 12px; vertical-align: middle; }
+            tbody tr td.center { text-align: center; }
+            tbody tr td.right { text-align: right; }
+            tbody tr td.sn { text-align: center; width: 32px; font-weight: 700; }
+            .empty-row td { height: 22px; }
+            /* ── TOTALS ── */
+            .totals-wrap { display: flex; justify-content: flex-end; margin-top: 4px; }
+            .totals-table { border-collapse: collapse; min-width: 220px; }
+            .totals-table td { border: 1px solid #000; padding: 5px 10px; font-size: 13px; }
+            .totals-table td.label { font-weight: 700; text-align: left; background: #f5f5f5; }
+            .totals-table td.value { text-align: right; font-weight: 700; min-width: 90px; }
+            .totals-table tr.due td { font-size: 15px; font-weight: 900; }
+            /* ── FOOTER ── */
+            .footer { text-align: center; margin-top: 14px; padding-top: 8px; border-top: 2px solid #000; font-size: 11px; color: #333; }
+            @media print {
+              body { padding: 4px; }
+              @page { margin: 8mm; }
+            }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>${s.shop_name}</h1>
-            ${s.tagline ? `<p class="tagline">${s.tagline}</p>` : ''}
-            <p class="contact">${s.address}, ${s.city} | ${s.phone}${s.phone2 ? ' / ' + s.phone2 : ''}</p>
-            ${s.gstin ? `<p style="font-size:11px;color:#9ca3af">GSTIN: ${s.gstin}</p>` : ''}
+          <p class="top-label">कैश मेमो</p>
+
+          <div class="shop-header">
+            <span class="shop-name-box">${s.shop_name.split(' ')[0]}</span>
+            <span class="shop-name-rest">${s.shop_name.split(' ').slice(1).join(' ') || s.tagline}</span>
           </div>
-          <div class="details">
-            <div class="details-col">
-              <p><strong>Billed To:</strong> ${order.customer_name}</p>
-              <p><strong>Phone:</strong> ${order.phone}</p>
-              ${order.address ? `<p><strong>Address:</strong> ${order.address}</p>` : ''}
+
+          <div class="shop-sub">
+            ${s.address}, ${s.city} &nbsp;|&nbsp; मोब: ${s.phone}${s.phone2 ? ' / ' + s.phone2 : ''}
+            ${s.gstin ? `&nbsp;|&nbsp; GSTIN: ${s.gstin}` : ''}
+          </div>
+
+          <div class="invoice-row">
+            <span><strong>बिल नं.&nbsp;-&nbsp;</strong>${order.id}</span>
+            <span><strong>दिनांक:&nbsp;</strong>${new Date(order.delivery_date).toLocaleDateString('hi-IN', { day:'2-digit', month:'2-digit', year:'numeric' })}</span>
+          </div>
+
+          <div class="info-section">
+            <div class="info-row">
+              <span class="info-label">श्री/श्रीमती :</span>
+              <span class="info-value">${order.customer_name}</span>
+              <span class="info-dots"></span>
             </div>
-            <div class="details-col" style="text-align: right;">
-              <p><strong>Order No:</strong> #${order.id}</p>
-              <p><strong>Delivery Date:</strong> ${order.delivery_date}</p>
+            <div class="info-row">
+              <span class="info-label">पता :</span>
+              <span class="info-value">${order.address || ''}</span>
+              <span class="info-dots"></span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">मोबाइल :</span>
+              <span class="info-value">${order.phone || ''}</span>
+              <span class="info-dots" style="max-width:120px"></span>
             </div>
           </div>
-          <div class="items-box">
-            <h3>Order Details / ऑर्डर विवरण</h3>
-            <ul>${itemsList}</ul>
-          </div>
-          <div class="totals-container">
-            <table class="totals">
-              <tr><td>Total Amount:</td><td>₹${order.total_amount}</td></tr>
-              ${order.discount > 0 ? `<tr><td>Discount:</td><td style="color:#059669">- ₹${order.discount}</td></tr>` : ''}
-              <tr><td>Advance Paid:</td><td style="color:#059669">- ₹${order.advance_paid}</td></tr>
-              <tr class="due-row"><td>Due Amount:</td><td>₹${order.total_amount - order.advance_paid}</td></tr>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px">क्र.</th>
+                <th class="left" style="width:auto">विवरण (Particulars)</th>
+                <th style="width:52px">मात्रा</th>
+                <th style="width:60px">दर (₹)</th>
+                <th style="width:72px">राशि (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemRows.map(r => `
+                <tr>
+                  <td class="sn">${r.sn}</td>
+                  <td>${r.name}</td>
+                  <td class="center">${r.qty}</td>
+                  <td class="right">${r.rate}</td>
+                  <td class="right">${r.amt}</td>
+                </tr>
+              `).join('')}
+              ${Array.from({ length: Math.max(0, 10 - itemRows.length) }).map(() => `
+                <tr class="empty-row">
+                  <td></td><td></td><td></td><td></td><td></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="totals-wrap">
+            <table class="totals-table">
+              <tr>
+                <td class="label">कुल (Total)</td>
+                <td class="value">₹ ${order.total_amount}</td>
+              </tr>
+              ${order.discount > 0 ? `
+              <tr>
+                <td class="label">छूट (Discount)</td>
+                <td class="value" style="color:#059669">- ₹ ${order.discount}</td>
+              </tr>` : ''}
+              <tr>
+                <td class="label">अग्रिम (Adv.)</td>
+                <td class="value">₹ ${order.advance_paid}</td>
+              </tr>
+              <tr class="due">
+                <td class="label">बकाया (Dues)</td>
+                <td class="value">₹ ${due < 0 ? 0 : due}</td>
+              </tr>
             </table>
           </div>
+
+          ${s.upi_id && due > 0 ? `
+          <div style="text-align:center;margin-top:10px">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(`upi://pay?pa=${s.upi_id}&pn=${s.shop_name}&am=${due}&cu=INR`)}" alt="UPI QR"/>
+            <p style="font-size:10px;margin-top:3px">UPI से भुगतान करें: ${s.upi_id}</p>
+          </div>` : ''}
+
           <div class="footer">
-            ${s.upi_id && (order.total_amount - order.advance_paid) > 0 ? `
-            <div style="margin-bottom:15px; text-align:center;">
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`upi://pay?pa=${s.upi_id}&pn=${s.shop_name}&am=${order.total_amount - order.advance_paid}&cu=INR`)}" alt="Pay via UPI" />
-              <p style="margin:5px 0 0; font-weight:bold; font-size:12px; color:#6b21a8">Scan QR to Pay Due Amount</p>
-            </div>
-            ` : ''}
             <strong>${s.footer_note}</strong>
-            <p>Contact: ${s.phone}${s.phone2 ? ' / ' + s.phone2 : ''}${s.upi_id ? ' | UPI: ' + s.upi_id : ''}</p>
-            <p style="margin-top:12px;font-size:10px;letter-spacing:1px;text-transform:uppercase">Powered by Poddar Solutions</p>
+            <p style="margin-top:5px;font-size:10px;letter-spacing:1px">Powered by Poddar Solutions</p>
           </div>
-          <script>window.onload = function() { setTimeout(() => { window.print(); }, 300); }</script>
+
+          <script>
+            document.fonts.ready.then(() => { setTimeout(() => { window.print(); }, 400); });
+          </script>
         </body>
       </html>
     `);
@@ -1952,205 +2091,166 @@ function ReportsPage() {
     fetchStats(selectedDate);
   };
 
-  const handleDownloadPDF = (e) => {
+  const handleDownloadPDF = async (e) => {
     const button = e.currentTarget;
     button.disabled = true;
+    const originalHTML = button.innerHTML;
+    button.innerHTML = '<span>Generating PDF...</span>';
     try {
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pW = 210;
-      const pH = 297;
-      const ml = 14; // margin left
-      const mr = 14; // margin right
-      const cW = pW - ml - mr; // content width
-      let y = 0;
+      await new Promise(r => setTimeout(r, 200));
 
-      const checkPage = (needed = 10) => {
-        if (y + needed > pH - 15) { pdf.addPage(); y = 20; }
-      };
+      // ── Noto Sans font fetch & embed for Hindi support ───────
+      // jsPDF default Helvetica Hindi render nahi kar sakta
+      // Hum ek clean HTML window mein render karke canvas se PDF banate hain
+      // lekin Tailwind oklch issue se bachne ke liye apna isolated HTML use karte hain
 
-      const setFont = (size, style = 'normal', color = [30, 30, 30]) => {
-        pdf.setFontSize(size);
-        pdf.setFont('helvetica', style);
-        pdf.setTextColor(...color);
-      };
-
-      const fillRect = (x, fy, w, h, r, g, b) => {
-        pdf.setFillColor(r, g, b);
-        pdf.rect(x, fy, w, h, 'F');
-      };
-
-      const hLine = (fy, r = 220, g = 220, b = 220) => {
-        pdf.setDrawColor(r, g, b);
-        pdf.setLineWidth(0.3);
-        pdf.line(ml, fy, pW - mr, fy);
-      };
-
-      // Hindi/Devanagari text ko PDF-safe banao (jsPDF standard fonts Unicode support nahi karte)
-      const safePdfText = (str) => {
-        if (!str) return '-';
-        // Check if string has non-Latin characters (Hindi/Devanagari range: \u0900-\u097F)
-        const hasDevanagari = /[\u0900-\u097F]/.test(str);
-        if (!hasDevanagari) return String(str).substring(0, 35);
-        // Devanagari text ko romanize nahi kar sakte, isliye brackets mein note karo
-        // aur Latin characters retain karo
-        return String(str).replace(/[\u0900-\u097F\u200C\u200D]+/g, (match) => `[${match}]`).substring(0, 35);
-      };
-
-      // ── HEADER BAND ──────────────────────────────────────────
-      fillRect(0, 0, pW, 38, 67, 56, 202); // indigo-700
-      setFont(11, 'bold', [199, 210, 254]); // indigo-200
-      pdf.text(shopSettings.shop_name || 'SweetCraft', ml, 10);
-      setFont(18, 'bold', [255, 255, 255]);
-      pdf.text('Daily Business Report', ml, 20);
-      setFont(9, 'normal', [199, 210, 254]); // indigo-200
-      const dateStr = new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-      pdf.text(dateStr, ml, 28);
-      setFont(8, 'normal', [199, 210, 254]);
-      pdf.text(`Generated: ${new Date().toLocaleString('en-IN')}`, pW - mr, 28, { align: 'right' });
-      y = 46;
-
-      // ── SUMMARY CARDS ─────────────────────────────────────────
       const netSale = stats.net_income;
-      const totalIncome = stats.total_principle - stats.total_income; // Principle - (Cash+Online)
+      const totalIncome = stats.total_principle - stats.total_income;
       const isProfit = totalIncome >= 0;
       const cashInHand = stats.total_income + stats.total_principle;
 
-      // Card helper
-      const card = (x, cy, w, h, label, value, sub, bgR, bgG, bgB, valR, valG, valB) => {
-        fillRect(x, cy, w, h, bgR, bgG, bgB);
-        setFont(7, 'bold', [100, 100, 120]);
-        pdf.text(label.toUpperCase(), x + 4, cy + 7);
-        setFont(13, 'bold', [valR, valG, valB]);
-        pdf.text(value, x + 4, cy + 16);
-        if (sub) { setFont(7, 'normal', [120, 120, 140]); pdf.text(sub, x + 4, cy + 22); }
-      };
+      // Build complete self-contained HTML for PDF
+      const incomeRows = (reports.incomes || []).map((r,i) => `
+        <tr style="background:${i%2===1?'#f9fafb':'#fff'}">
+          <td>${r.payment_mode||'-'}</td><td>${r.description||'-'}</td>
+          <td style="text-align:right;font-weight:700">Rs.${r.amount}</td>
+          <td style="color:#666">${r.date.split(' ').slice(1).join(' ')}</td>
+        </tr>`).join('');
 
-      const cardH = 26;
-      const cardW = (cW - 6) / 4;
-      card(ml,           y, cardW, cardH, 'Total Sale',    `Rs.${stats.total_income}`,   `Cash: ${stats.total_cash} | Online: ${stats.total_online}`, 240,253,244, 5,150,105);
-      card(ml+cardW+2,   y, cardW, cardH, 'Total Expense', `Rs.${stats.total_expense}`,  '', 255,241,242, 190,18,60);
-      card(ml+cardW*2+4, y, cardW, cardH, 'Staff Pay',     `Rs.${stats.total_staff_pay}`, '', 255,247,237, 194,65,12);
-      card(ml+cardW*3+6, y, cardW, cardH, 'Principle',     `Rs.${stats.total_principle}`, '', 239,246,255, 29,78,216);
-      y += cardH + 4;
+      const expenseRows = (reports.expenses || []).map((r,i) => `
+        <tr style="background:${i%2===1?'#f9fafb':'#fff'}">
+          <td>${r.item_name||'-'}</td>
+          <td>${r.mahajan?`${r.mahajan} (${r.status})`:r.status||'-'}</td>
+          <td style="text-align:right;font-weight:700">Rs.${r.amount}</td>
+          <td style="color:#666">${r.date.split(' ').slice(1).join(' ')}</td>
+        </tr>`).join('');
 
-      // Net Sale + Total Income row
-      const halfW = (cW - 4) / 2;
-      // Net Sale card
-      fillRect(ml, y, halfW, cardH, 243,244,246);
-      setFont(7, 'bold', [100,100,120]); pdf.text('NET DAILY SALES', ml+4, y+7);
-      setFont(13, 'bold', [30,30,30]); pdf.text(`Rs.${netSale}`, ml+4, y+16);
-      setFont(7, 'normal', [120,120,140]); pdf.text('Expense + Staff + Principle - Sale', ml+4, y+22);
-      // Total Income card (Profit/Loss)
-      const tiX = ml + halfW + 4;
-      fillRect(tiX, y, halfW, cardH, isProfit ? 240:255, isProfit ? 253:241, isProfit ? 244:242);
-      setFont(7, 'bold', [100,100,120]); pdf.text('TOTAL INCOME (P&L)', tiX+4, y+7);
-      setFont(13, 'bold', isProfit ? [5,150,105] : [190,18,60]);
-      pdf.text(`${isProfit ? 'PROFIT' : 'LOSS'}: Rs.${Math.abs(totalIncome)}`, tiX+4, y+16);
-      setFont(7, 'normal', [120,120,140]); pdf.text('Principle - (Cash + Online)', tiX+4, y+22);
-      y += cardH + 4;
+      const staffAdv = (reports.staff||[]).filter(r=>r.txn_type==='Advance'||r.txn_type==='Settle');
+      const staffRows = staffAdv.map((r,i) => `
+        <tr style="background:${i%2===1?'#f9fafb':'#fff'}">
+          <td>${r.staff_name||'-'}</td><td>${r.description||'-'}</td>
+          <td>${r.txn_type}</td>
+          <td style="text-align:right;font-weight:700">Rs.${r.amount}</td>
+          <td style="color:#666">${r.date.split(' ').slice(1).join(' ')}</td>
+        </tr>`).join('');
 
-      // Cash in Hand
-      fillRect(ml, y, cW, 14, 250,245,255);
-      setFont(8, 'bold', [88,28,135]); pdf.text(`Total Cash in Hand: Rs.${cashInHand}`, ml+4, y+9);
-      setFont(7, 'normal', [120,100,160]); pdf.text('= Total Sale + Principle', ml+4+70, y+9);
-      y += 18;
+      const principleRows = (reports.principles||[]).map((r,i) => `
+        <tr style="background:${i%2===1?'#f9fafb':'#fff'}">
+          <td style="text-align:right;font-weight:700">Rs.${r.amount}</td>
+          <td>${r.description||'-'}</td>
+          <td style="color:#666">${r.date.split(' ').slice(1).join(' ')}</td>
+        </tr>`).join('');
 
-      // ── SECTION HELPER ────────────────────────────────────────
-      const sectionHeader = (title, count) => {
-        checkPage(14);
-        fillRect(ml, y, cW, 10, 67, 56, 202);
-        setFont(9, 'bold', [255,255,255]);
-        pdf.text(title, ml+3, y+7);
-        setFont(8, 'normal', [199,210,254]);
-        pdf.text(`${count} records`, pW-mr-3, y+7, { align: 'right' });
-        y += 10;
-      };
+      const sectionTable = (title, count, headers, rows, totalRow) => !rows ? '' : `
+        <div class="section">
+          <div class="sec-header"><span>${title}</span><span>${count} records</span></div>
+          <table>
+            <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+            <tbody>${rows}
+              <tr class="total-row"><td colspan="${headers.length-2}" style="font-weight:700">TOTAL</td>
+              ${totalRow}</tr>
+            </tbody>
+          </table>
+        </div>`;
 
-      const tableHeader = (cols, widths) => {
-        checkPage(8);
-        fillRect(ml, y, cW, 7, 243,244,246);
-        setFont(7.5, 'bold', [80,80,100]);
-        let x = ml + 2;
-        cols.forEach((c, i) => { pdf.text(c, x, y+5); x += widths[i]; });
-        y += 7;
-        hLine(y, 200, 200, 210);
-        y += 1;
-      };
+      const dateStr = new Date(selectedDate+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 
-      const tableRow = (cols, widths, isAlt = false) => {
-        checkPage(7);
-        if (isAlt) fillRect(ml, y, cW, 6.5, 249,250,251);
-        setFont(8, 'normal', [40,40,50]);
-        let x = ml + 2;
-        cols.forEach((c, i) => {
-          pdf.text(safePdfText(c), x, y+5);
-          x += widths[i];
-        });
-        y += 6.5;
-      };
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+        <link rel="preconnect" href="https://fonts.googleapis.com"/>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700&family=Inter:wght@400;600;700;900&display=swap"/>
+        <style>
+          *{box-sizing:border-box;margin:0;padding:0}
+          body{font-family:'Inter','Noto Sans Devanagari',Arial,sans-serif;background:#fff;color:#1a1a2e;font-size:11px;width:794px}
+          .header{background:linear-gradient(135deg,#4338ca,#6366f1);color:#fff;padding:20px 24px 16px;margin-bottom:0}
+          .header .shop{font-size:11px;font-weight:600;color:#c7d2fe;letter-spacing:1px;text-transform:uppercase}
+          .header h1{font-size:26px;font-weight:900;margin:2px 0 4px;color:#fff}
+          .header .meta{display:flex;justify-content:space-between;font-size:9px;color:#a5b4fc}
+          .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid #e5e7eb;margin:16px 24px 0}
+          .card{padding:12px 14px;border-right:1px solid #e5e7eb}
+          .card:last-child{border-right:none}
+          .card .lbl{font-size:8px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+          .card .val{font-size:18px;font-weight:900}
+          .card .sub{font-size:8px;color:#9ca3af;margin-top:2px}
+          .card.green .val{color:#059669}.card.red .val{color:#dc2626}.card.orange .val{color:#d97706}.card.blue .val{color:#2563eb}
+          .row2{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #e5e7eb;border-top:none;margin:0 24px}
+          .row2-card{padding:12px 14px;border-right:1px solid #e5e7eb}
+          .row2-card:last-child{border-right:none}
+          .row2-card .lbl{font-size:8px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+          .row2-card .val{font-size:20px;font-weight:900;color:#111}
+          .row2-card .sub{font-size:8px;color:#9ca3af;margin-top:2px}
+          .profit{color:#059669!important}.loss{color:#dc2626!important}
+          .cash-bar{background:#f5f3ff;border:1px solid #e5e7eb;border-top:none;margin:0 24px;padding:8px 14px;font-size:10px;font-weight:700;color:#6d28d9}
+          .section{margin:16px 24px 0}
+          .sec-header{background:#4338ca;color:#fff;padding:6px 10px;display:flex;justify-content:space-between;font-size:10px;font-weight:700;border-radius:4px 4px 0 0}
+          table{width:100%;border-collapse:collapse;font-size:10px}
+          th{background:#f3f4f6;padding:6px 8px;text-align:left;font-weight:700;color:#374151;border:1px solid #e5e7eb}
+          td{padding:5px 8px;border:1px solid #e5e7eb;color:#374151}
+          .total-row{background:#eef2ff!important}
+          .total-row td{font-weight:700;color:#4338ca;border-top:2px solid #c7d2fe}
+          .footer{text-align:center;padding:16px 24px 12px;font-size:9px;color:#9ca3af;border-top:2px solid #e5e7eb;margin-top:20px}
+        </style></head><body>
+        <div class="header">
+          <div class="shop">${shopSettings.shop_name||'SweetCraft'}</div>
+          <h1>Daily Business Report</h1>
+          <div class="meta"><span>${dateStr}</span><span>Generated: ${new Date().toLocaleString('en-IN')}</span></div>
+        </div>
+        <div class="cards">
+          <div class="card green"><div class="lbl">Principle</div><div class="val">Rs.${stats.total_income}</div><div class="sub">Cash:${stats.total_cash} | Online:${stats.total_online}</div></div>
+          <div class="card red"><div class="lbl">Total Expense</div><div class="val">Rs.${stats.total_expense}</div></div>
+          <div class="card orange"><div class="lbl">Staff Pay</div><div class="val">Rs.${stats.total_staff_pay}</div></div>
+          <div class="card blue"><div class="lbl">Direct Income</div><div class="val">Rs.${stats.total_principle}</div></div>
+        </div>
+        <div class="row2">
+          <div class="row2-card"><div class="lbl">Net Daily Sales</div><div class="val">Rs.${netSale}</div><div class="sub">Expense + Staff + Direct Income - Principle</div></div>
+          <div class="row2-card"><div class="lbl">Total Income (P&amp;L)</div><div class="val ${isProfit?'profit':'loss'}">${isProfit?'PROFIT':'OVER EXPENSE'}: Rs.${Math.abs(totalIncome)}</div><div class="sub">Direct Income - (Cash + Online)</div></div>
+        </div>
+        <div class="cash-bar">Total Cash in Hand: Rs.${cashInHand} &nbsp;=&nbsp; Principle + Direct Income</div>
+        ${(reports.incomes?.length>0)?sectionTable('PRINCIPLE DETAILS',reports.incomes.length,['Mode','Description','Amount','Time'],incomeRows,`<td></td><td style="text-align:right;font-weight:900;color:#4338ca">Rs.${reports.incomes.reduce((s,r)=>s+r.amount,0).toFixed(2)}</td><td></td>`):''}
+        ${(reports.expenses?.length>0)?sectionTable('EXPENSE DETAILS',reports.expenses.length,['Item','Vendor / Status','Amount','Time'],expenseRows,`<td></td><td style="text-align:right;font-weight:900;color:#4338ca">Rs.${reports.expenses.reduce((s,r)=>s+r.amount,0).toFixed(2)}</td><td></td>`):''}
+        ${(staffAdv.length>0)?sectionTable('STAFF PAYMENT DETAILS',staffAdv.length,['Staff Name','Note','Type','Amount','Time'],staffRows,`<td></td><td style="text-align:right;font-weight:900;color:#4338ca">Rs.${staffAdv.reduce((s,r)=>s+r.amount,0).toFixed(2)}</td><td></td>`):''}
+        ${(reports.principles?.length>0)?sectionTable('DIRECT INCOME DETAILS',reports.principles.length,['Amount','Description','Time'],principleRows,`<td style="text-align:right;font-weight:900;color:#4338ca">Rs.${reports.principles.reduce((s,r)=>s+r.amount,0).toFixed(2)}</td><td colspan="2"></td>`):''}
+        <div class="footer">Powered by Poddar Solutions &nbsp;|&nbsp; Generated on ${new Date().toLocaleString('en-IN')}</div>
+      </body></html>`;
 
-      const tableTotal = (cols, widths) => {
-        hLine(y, 180, 180, 200);
-        y += 1;
-        fillRect(ml, y, cW, 7, 238,242,255);
-        setFont(8.5, 'bold', [67,56,202]);
-        let x = ml + 2;
-        cols.forEach((c, i) => { pdf.text(String(c), x, y+5); x += widths[i]; });
-        y += 9;
-      };
+      // Isolated iframe mein render karo - Tailwind oklch se isolated
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1px;border:none;';
+      document.body.appendChild(iframe);
+      const iDoc = iframe.contentDocument || iframe.contentWindow.document;
+      iDoc.open(); iDoc.write(html); iDoc.close();
 
-      // ── INCOME TABLE ──────────────────────────────────────────
-      if (reports.incomes && reports.incomes.length > 0) {
-        sectionHeader('INCOME DETAILS', reports.incomes.length);
-        const w = [22, 85, 35, 38];
-        tableHeader(['Mode', 'Description', 'Amount', 'Time'], w);
-        reports.incomes.forEach((r, i) => tableRow([r.payment_mode, r.description || '-', `Rs.${r.amount}`, r.date.split(' ').slice(1).join(' ')], w, i%2===1));
-        tableTotal(['TOTAL', '', `Rs.${reports.incomes.reduce((s,r)=>s+r.amount,0).toFixed(2)}`, ''], w);
+      // Font + render load hone ka wait
+      await new Promise(r => setTimeout(r, 1500));
+
+      const bodyH = iDoc.body.scrollHeight;
+      iframe.style.height = bodyH + 'px';
+      await new Promise(r => setTimeout(r, 300));
+
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(iDoc.body, {
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#ffffff', logging: false,
+        windowWidth: 794, windowHeight: bodyH,
+      });
+      document.body.removeChild(iframe);
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pW = 210, pH = 297;
+      const imgH = (canvas.height * pW) / canvas.width;
+      let yOff = 0;
+      while (yOff < imgH) {
+        if (yOff > 0) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, -yOff, pW, imgH);
+        yOff += pH;
       }
+      pdf.save(`Daily_Report_${selectedDate.replace(/-/g,'')}.pdf`);
 
-      // ── EXPENSE TABLE ─────────────────────────────────────────
-      if (reports.expenses && reports.expenses.length > 0) {
-        sectionHeader('EXPENSE DETAILS', reports.expenses.length);
-        const w = [55, 50, 35, 40];
-        tableHeader(['Item', 'Vendor / Status', 'Amount', 'Time'], w);
-        reports.expenses.forEach((r, i) => tableRow([r.item_name, r.mahajan ? `${r.mahajan} (${r.status})` : r.status, `Rs.${r.amount}`, r.date.split(' ').slice(1).join(' ')], w, i%2===1));
-        tableTotal(['TOTAL', '', `Rs.${reports.expenses.reduce((s,r)=>s+r.amount,0).toFixed(2)}`, ''], w);
-      }
-
-      // ── STAFF TABLE ───────────────────────────────────────────
-      const staffAdv = (reports.staff || []).filter(r => r.txn_type === 'Advance' || r.txn_type === 'Settle');
-      if (staffAdv.length > 0) {
-        sectionHeader('STAFF PAYMENT DETAILS', staffAdv.length);
-        const w = [40, 50, 22, 28, 40];
-        tableHeader(['Staff Name', 'Note', 'Type', 'Amount', 'Time'], w);
-        staffAdv.forEach((r, i) => tableRow([r.staff_name, r.description || '-', r.txn_type, `Rs.${r.amount}`, r.date.split(' ').slice(1).join(' ')], w, i%2===1));
-        tableTotal(['TOTAL', '', '', `Rs.${staffAdv.reduce((s,r)=>s+r.amount,0).toFixed(2)}`, ''], w);
-      }
-
-      // ── PRINCIPLE TABLE ───────────────────────────────────────
-      if (reports.principles && reports.principles.length > 0) {
-        sectionHeader('PRINCIPLE DETAILS', reports.principles.length);
-        const w = [35, 100, 45];
-        tableHeader(['Amount', 'Description', 'Time'], w);
-        reports.principles.forEach((r, i) => tableRow([`Rs.${r.amount}`, r.description || '-', r.date.split(' ').slice(1).join(' ')], w, i%2===1));
-        tableTotal([`Rs.${reports.principles.reduce((s,r)=>s+r.amount,0).toFixed(2)}`, 'TOTAL', ''], w);
-      }
-
-      // ── FOOTER ────────────────────────────────────────────────
-      const totalPages = pdf.internal.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
-        pdf.setPage(i);
-        fillRect(0, pH - 12, pW, 12, 67, 56, 202);
-        setFont(7, 'normal', [199,210,254]);
-        pdf.text('Powered by Poddar Solutions', ml, pH - 5);
-        pdf.text(`Page ${i} of ${totalPages}`, pW - mr, pH - 5, { align: 'right' });
-      }
-
-      pdf.save(`Daily_Report_${selectedDate.replace(/-/g, '')}.pdf`);
     } catch (err) {
       alert('PDF generation failed: ' + err.message);
     } finally {
       button.disabled = false;
+      button.innerHTML = originalHTML;
     }
   };
 
@@ -2243,7 +2343,7 @@ function ReportsPage() {
       
       {/* COMPLETE PRINT VIEW - ALL SECTIONS */}
       <div id="printable-report" style={{display: 'none'}} className="print-content">
-        <div style={{padding: '20px', fontFamily: 'Arial, sans-serif', color: '#000', background: '#fff'}}>
+        <div style={{padding: '20px', fontFamily: "'Noto Sans Devanagari', 'Mangal', Arial, sans-serif", color: '#000', background: '#fff'}}>
         
         {/* Print Header */}
         <div style={{textAlign: 'center', marginBottom: '20px', borderBottom: '3px solid #000', paddingBottom: '15px'}}>
@@ -2257,7 +2357,7 @@ function ReportsPage() {
           <h2 style={{fontSize: '16px', fontWeight: 'bold', marginBottom: '12px', color: '#000'}}>Daily Summary</h2>
           <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '12px'}}>
             <div style={{borderRight: '1px solid #666', paddingRight: '10px'}}>
-              <p style={{fontSize: '10px', fontWeight: 'bold', marginBottom: '4px', color: '#000'}}>Total Income</p>
+              <p style={{fontSize: '10px', fontWeight: 'bold', marginBottom: '4px', color: '#000'}}>Principle</p>
               <p style={{fontSize: '18px', fontWeight: 'bold', color: '#000'}}>₹{stats.total_income}</p>
               <p style={{fontSize: '8px', color: '#000'}}>Cash: ₹{stats.total_cash} | Online: ₹{stats.total_online}</p>
             </div>
@@ -2270,7 +2370,7 @@ function ReportsPage() {
               <p style={{fontSize: '18px', fontWeight: 'bold', color: '#000'}}>₹{stats.total_staff_pay}</p>
             </div>
             <div>
-              <p style={{fontSize: '10px', fontWeight: 'bold', marginBottom: '4px', color: '#000'}}>Principle</p>
+              <p style={{fontSize: '10px', fontWeight: 'bold', marginBottom: '4px', color: '#000'}}>Direct Income</p>
               <p style={{fontSize: '18px', fontWeight: 'bold', color: '#000'}}>₹{stats.total_principle}</p>
             </div>
           </div>
@@ -2279,7 +2379,7 @@ function ReportsPage() {
             <p style={{fontSize: '22px', fontWeight: 'bold', color: '#000'}}>Rs.{stats.net_income}</p>
             <p style={{fontSize: '8px', color: '#555'}}>Net Sale = Expense + Staff + Principle - Sale</p>
             <p style={{fontSize: '10px', fontWeight: 'bold', marginTop: '8px', color: '#000'}}>
-              Total Income (P&L): {(() => { const ti = stats.total_principle - stats.total_income; return ti >= 0 ? `PROFIT Rs.${ti}` : `LOSS Rs.${Math.abs(ti)}`; })()}
+              Total Income (P&L): {(() => { const ti = stats.total_principle - stats.total_income; return ti >= 0 ? `PROFIT Rs.${ti}` : `OVER EXPENSE Rs.${Math.abs(ti)}`; })()}
             </p>
             <p style={{fontSize: '8px', color: '#555'}}>Formula: Principle - (Cash + Online)</p>
             <p style={{fontSize: '10px', fontWeight: 'bold', marginTop: '4px', color: '#000'}}>Total Cash in Hand: Rs.{stats.total_income + stats.total_principle}</p>
@@ -2288,7 +2388,7 @@ function ReportsPage() {
           {/* Income Section */}
           {reports.incomes && reports.incomes.length > 0 && (
             <div style={{marginBottom: '20px'}}>
-              <h3 style={{fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', borderBottom: '2px solid #000', paddingBottom: '4px'}}>Daily Income Details</h3>
+              <h3 style={{fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', borderBottom: '2px solid #000', paddingBottom: '4px'}}>Principle Details</h3>
               <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '10px'}}>
                 <thead>
                   <tr style={{backgroundColor: '#e0e0e0'}}>
@@ -2386,7 +2486,7 @@ function ReportsPage() {
           {/* Principle Section */}
           {reports.principles && reports.principles.length > 0 && (
             <div style={{marginBottom: '20px'}}>
-              <h3 style={{fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', borderBottom: '2px solid #000', paddingBottom: '4px'}}>Principle Details</h3>
+              <h3 style={{fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', borderBottom: '2px solid #000', paddingBottom: '4px'}}>Direct Income Details</h3>
               <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '10px'}}>
                 <thead>
                   <tr style={{backgroundColor: '#e0e0e0'}}>
@@ -2424,8 +2524,8 @@ function ReportsPage() {
       {(activeTab === 'incomes' || activeTab === 'principles' || activeTab === 'expenses' || activeTab === 'staff') && (
         <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-6 rounded-[2rem] text-white shadow-lg print:hidden">
           <p className="text-purple-100 font-bold tracking-widest mb-2 uppercase text-[10px]">
-            {activeTab === 'incomes' && 'Total Daily Income'}
-            {activeTab === 'principles' && 'Total Principle'}
+            {activeTab === 'incomes' && 'Total Principle'}
+            {activeTab === 'principles' && 'Total Direct Income'}
             {activeTab === 'expenses' && 'Total Daily Expense'}
             {activeTab === 'staff' && 'Total Staff Payment (Advance)'}
           </p>
@@ -2438,8 +2538,8 @@ function ReportsPage() {
 
       <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-6 shadow-sm border border-zinc-100 dark:border-zinc-800 flex flex-col min-h-[500px] print:rounded-none print:shadow-none print:border-2">
         <div className="flex overflow-x-auto border-b border-zinc-200 dark:border-zinc-800 mb-6 scrollbar-hide print:border-b-2 print:border-zinc-300">
-          <TabButton id="incomes" label={t('Daily Income')} />
-          <TabButton id="principles" label={t('Principle')} />
+          <TabButton id="incomes" label={t('Principle')} />
+          <TabButton id="principles" label={t('Direct Income')} />
           <TabButton id="expenses" label={t('Daily Expense')} />
           <TabButton id="staff" label={t('Staff Khata')} />
           <TabButton id="customers" label={t('Udhari Ledger')} />
@@ -2481,8 +2581,8 @@ function ReportsPage() {
         {/* Print View: All Data */}
         <div className="hidden print:block">
           <h3 className="text-base font-black text-zinc-900 mb-3">
-            {activeTab === 'incomes' && 'Daily Income Details'}
-            {activeTab === 'principles' && 'Principle Details'}
+            {activeTab === 'incomes' && 'Principle Details'}
+            {activeTab === 'principles' && 'Direct Income Details'}
             {activeTab === 'expenses' && 'Daily Expense Details'}
             {activeTab === 'staff' && 'Staff Payment Details'}
             {activeTab === 'customers' && 'Customer Udhari Details'}

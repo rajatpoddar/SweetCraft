@@ -619,9 +619,16 @@ def staff_advance_clear(id):
         staff.balance -= amount
         db.session.add(Ledger(staff_id=id, txn_type='Advance', amount=amount, description=note or 'Cash Advance Given'))
     elif action == 'clear':
-        cleared_amt = staff.balance
-        staff.balance = 0.0
-        db.session.add(Ledger(staff_id=id, txn_type='Settle', amount=cleared_amt, description=note or 'Month End Settlement'))
+        amount = float(data.get('amount', 0))
+        if amount <= 0:
+            # Pura balance settle karo
+            cleared_amt = staff.balance
+            staff.balance = 0.0
+        else:
+            # Partial settle - sirf itna amount balance mein add karo
+            cleared_amt = amount
+            staff.balance += amount  # balance negative tha, amount add karne se kam negative hoga
+        db.session.add(Ledger(staff_id=id, txn_type='Settle', amount=cleared_amt, description=note or 'Settlement'))
     db.session.commit()
     return jsonify({"message": "Account updated!", "balance": staff.balance})
 

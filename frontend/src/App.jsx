@@ -583,7 +583,7 @@ function Dashboard() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <form onSubmit={handleIncomeSubmit} className="bg-white/10 p-5 rounded-[1.5rem] border border-white/20 backdrop-blur-md flex flex-col gap-3">
-               <h4 className="font-bold text-[11px] uppercase tracking-widest text-emerald-50 mb-1">{t('Record Direct Income')}</h4>
+               <h4 className="font-bold text-[11px] uppercase tracking-widest text-emerald-50 mb-1">{t('Principle Amount')}</h4>
                <div className="grid grid-cols-2 gap-2">
                  <select className="bg-white/20 text-white rounded-xl px-3 py-2 text-sm outline-none border border-white/10" value={incomeForm.payment_mode} onChange={e=>setIncomeForm({...incomeForm, payment_mode: e.target.value})}>
                    <option value="Cash" className="text-black">{t('Cash')}</option>
@@ -919,7 +919,7 @@ function StaffPage() {
       headers: { 'Content-Type': 'application/json' }, 
       body: JSON.stringify({ action: payModal.action, amount: Number(payModal.amount), note: payModal.note }) 
     }).then(() => { 
-      setPayModal({ isOpen: false, staffId: null, action: '', amount: '', note: '' });
+      setPayModal({ isOpen: false, staffId: null, action: '', amount: '', note: '', currentBalance: undefined });
       fetchStaff(); 
       fetchTodayPay(); 
     }).finally(() => setIsSubmitting(false));
@@ -1126,7 +1126,7 @@ function StaffPage() {
               
               <div className="flex gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <UI_Button onClick={() => setPayModal({isOpen: true, staffId: staff.id, action: 'advance', amount: '', note: ''})} variant="danger" className="!py-2 !text-sm flex-1">{t('Pay')}</UI_Button>
-                <UI_Button onClick={() => setPayModal({isOpen: true, staffId: staff.id, action: 'clear', amount: staff.balance, note: 'Settle all dues'})} variant="outline" className="!py-2 !text-sm flex-1">{t('Settle')}</UI_Button>
+                <UI_Button onClick={() => setPayModal({isOpen: true, staffId: staff.id, action: 'clear', amount: '', note: '', currentBalance: staff.balance})} variant="outline" className="!py-2 !text-sm flex-1">{t('Settle')}</UI_Button>
                 <UI_Button onClick={() => handleViewHistory(staff)} variant="secondary" className="!py-2 !text-sm flex-1"><History size={14}/> {t('Log')}</UI_Button>
               </div>
             </div>
@@ -1140,12 +1140,43 @@ function StaffPage() {
         
           <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl border border-zinc-200 dark:border-zinc-800 relative animate-fade-in">
             <button onClick={() => setPayModal({ isOpen: false, staffId: null, action: '', amount: '', note: '' })} className="absolute top-6 right-6 p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"><X size={20} /></button>
-            <h2 className="text-2xl font-black mb-6 dark:text-white">{payModal.action === 'advance' ? 'Pay Staff Amount' : 'Settle Staff Dues'}</h2>
-            
+            <h2 className="text-2xl font-black mb-4 dark:text-white">{payModal.action === 'advance' ? t('Pay Staff Amount') : t('Settle Staff Dues')}</h2>
+
+            {payModal.action === 'clear' && (
+              <div className="mb-5 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Current Balance</p>
+                <p className={`text-3xl font-black ${payModal.currentBalance < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                  ₹{payModal.currentBalance}
+                </p>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {payModal.currentBalance < 0 ? 'Staff ko itna dena baaki hai' : 'Staff ka credit balance hai'}
+                </p>
+              </div>
+            )}
+
             <form onSubmit={submitFinance} className="space-y-4">
-               {payModal.action === 'advance' && <UI_Input label={t('Amount (₹)')} type="number" value={payModal.amount} onChange={e=>setPayModal({...payModal, amount: e.target.value})} required />}
-               <UI_Input label={t('Note / Detail')} placeholder="kis cheez ke liye pay kar rhe ho..." value={payModal.note} onChange={e=>setPayModal({...payModal, note: e.target.value})} />
-               <div className="pt-4"><UI_Button type="submit" variant={payModal.action === 'advance' ? 'danger' : 'success'} disabled={isSubmitting}>{isSubmitting ? t('Processing...') : `Confirm ${payModal.action === 'advance' ? 'Pay' : 'Settle'}`}</UI_Button></div>
+               {payModal.action === 'advance' && (
+                 <UI_Input label={t('Amount (₹)')} type="number" value={payModal.amount} onChange={e=>setPayModal({...payModal, amount: e.target.value})} required />
+               )}
+               {payModal.action === 'clear' && (
+                 <div>
+                   <UI_Input
+                     label="Settle karne ki rashi (₹)"
+                     type="number"
+                     placeholder={`e.g. ${Math.abs(payModal.currentBalance || 0)}`}
+                     value={payModal.amount}
+                     onChange={e => setPayModal({...payModal, amount: e.target.value})}
+                     required
+                   />
+                   {payModal.amount !== '' && payModal.currentBalance !== undefined && (
+                     <p className="text-sm font-bold mt-2 ml-1 text-blue-600 dark:text-blue-400">
+                       Settle ke baad balance: ₹{(Number(payModal.currentBalance) + Number(payModal.amount || 0)).toFixed(0)}
+                     </p>
+                   )}
+                 </div>
+               )}
+               <UI_Input label={t('Note / Detail')} placeholder="settlement ka reason..." value={payModal.note} onChange={e=>setPayModal({...payModal, note: e.target.value})} />
+               <div className="pt-2"><UI_Button type="submit" variant={payModal.action === 'advance' ? 'danger' : 'success'} disabled={isSubmitting}>{isSubmitting ? t('Processing...') : payModal.action === 'advance' ? t('Confirm Pay') : 'Confirm Settle'}</UI_Button></div>
             </form>
           </div>
         </div>
@@ -2141,75 +2172,283 @@ function ReportsPage() {
           <td style="color:#666">${r.date.split(' ').slice(1).join(' ')}</td>
         </tr>`).join('');
 
-      const sectionTable = (title, count, headers, rows, totalRow) => !rows ? '' : `
-        <div class="section">
-          <div class="sec-header"><span>${title}</span><span>${count} records</span></div>
-          <table>
-            <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
-            <tbody>${rows}
-              <tr class="total-row"><td colspan="${headers.length-2}" style="font-weight:700">TOTAL</td>
-              ${totalRow}</tr>
-            </tbody>
-          </table>
-        </div>`;
-
       const dateStr = new Date(selectedDate+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-        <link rel="preconnect" href="https://fonts.googleapis.com"/>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700&family=Inter:wght@400;600;700;900&display=swap"/>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700&display=swap"/>
         <style>
-          *{box-sizing:border-box;margin:0;padding:0}
-          body{font-family:'Inter','Noto Sans Devanagari',Arial,sans-serif;background:#fff;color:#1a1a2e;font-size:11px;width:794px}
-          .header{background:linear-gradient(135deg,#4338ca,#6366f1);color:#fff;padding:20px 24px 16px;margin-bottom:0}
-          .header .shop{font-size:11px;font-weight:600;color:#c7d2fe;letter-spacing:1px;text-transform:uppercase}
-          .header h1{font-size:26px;font-weight:900;margin:2px 0 4px;color:#fff}
-          .header .meta{display:flex;justify-content:space-between;font-size:9px;color:#a5b4fc}
-          .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid #e5e7eb;margin:16px 24px 0}
-          .card{padding:12px 14px;border-right:1px solid #e5e7eb}
-          .card:last-child{border-right:none}
-          .card .lbl{font-size:8px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
-          .card .val{font-size:18px;font-weight:900}
-          .card .sub{font-size:8px;color:#9ca3af;margin-top:2px}
-          .card.green .val{color:#059669}.card.red .val{color:#dc2626}.card.orange .val{color:#d97706}.card.blue .val{color:#2563eb}
-          .row2{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #e5e7eb;border-top:none;margin:0 24px}
-          .row2-card{padding:12px 14px;border-right:1px solid #e5e7eb}
-          .row2-card:last-child{border-right:none}
-          .row2-card .lbl{font-size:8px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
-          .row2-card .val{font-size:20px;font-weight:900;color:#111}
-          .row2-card .sub{font-size:8px;color:#9ca3af;margin-top:2px}
-          .profit{color:#059669!important}.loss{color:#dc2626!important}
-          .cash-bar{background:#f5f3ff;border:1px solid #e5e7eb;border-top:none;margin:0 24px;padding:8px 14px;font-size:10px;font-weight:700;color:#6d28d9}
-          .section{margin:16px 24px 0}
-          .sec-header{background:#4338ca;color:#fff;padding:6px 10px;display:flex;justify-content:space-between;font-size:10px;font-weight:700;border-radius:4px 4px 0 0}
-          table{width:100%;border-collapse:collapse;font-size:10px}
-          th{background:#f3f4f6;padding:6px 8px;text-align:left;font-weight:700;color:#374151;border:1px solid #e5e7eb}
-          td{padding:5px 8px;border:1px solid #e5e7eb;color:#374151}
-          .total-row{background:#eef2ff!important}
-          .total-row td{font-weight:700;color:#4338ca;border-top:2px solid #c7d2fe}
-          .footer{text-align:center;padding:16px 24px 12px;font-size:9px;color:#9ca3af;border-top:2px solid #e5e7eb;margin-top:20px}
-        </style></head><body>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: 'Noto Sans Devanagari', Arial, Helvetica, sans-serif;
+            background: #fff;
+            color: #111;
+            font-size: 12px;
+            width: 794px;
+            line-height: 1.5;
+          }          /* HEADER */
+          .header {
+            background: #4338ca;
+            color: #fff;
+            padding: 18px 28px 14px;
+          }
+          .header .shop-name {
+            font-size: 11px;
+            font-weight: bold;
+            color: #c7d2fe;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+          }
+          .header h1 {
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 6px;
+            letter-spacing: 0;
+          }
+          .header .meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #a5b4fc;
+          }
+          /* SUMMARY CARDS */
+          .cards-wrap {
+            margin: 16px 28px 0;
+            border: 1px solid #d1d5db;
+          }
+          .cards-row {
+            display: flex;
+            border-bottom: 1px solid #d1d5db;
+          }
+          .cards-row:last-child { border-bottom: none; }
+          .card {
+            flex: 1;
+            padding: 12px 16px;
+            border-right: 1px solid #d1d5db;
+          }
+          .card:last-child { border-right: none; }
+          .card .lbl {
+            font-size: 9px;
+            font-weight: bold;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+          }
+          .card .val {
+            font-size: 20px;
+            font-weight: bold;
+            line-height: 1.2;
+          }
+          .card .sub {
+            font-size: 9px;
+            color: #9ca3af;
+            margin-top: 3px;
+          }
+          .green { color: #059669; }
+          .red   { color: #dc2626; }
+          .orange{ color: #d97706; }
+          .blue  { color: #2563eb; }
+          .profit-color { color: #059669; }
+          .loss-color   { color: #dc2626; }
+          /* CASH BAR */
+          .cash-bar {
+            margin: 0 28px;
+            background: #f5f3ff;
+            border: 1px solid #d1d5db;
+            border-top: none;
+            padding: 8px 16px;
+            font-size: 11px;
+            font-weight: bold;
+            color: #4338ca;
+          }
+          /* SECTIONS */
+          .section { margin: 18px 28px 0; }
+          .sec-header {
+            background: #4338ca;
+            color: #fff;
+            padding: 7px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 0.3px;
+          }
+          .sec-header .count {
+            font-size: 10px;
+            font-weight: normal;
+            color: #c7d2fe;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+          }
+          th {
+            background: #f3f4f6;
+            padding: 7px 10px;
+            text-align: left;
+            font-weight: bold;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            font-size: 10px;
+          }
+          td {
+            padding: 6px 10px;
+            border: 1px solid #e5e7eb;
+            color: #374151;
+            vertical-align: middle;
+          }
+          tr:nth-child(even) td { background: #f9fafb; }
+          .total-row td {
+            font-weight: bold;
+            color: #4338ca;
+            background: #eef2ff;
+            border-top: 2px solid #c7d2fe;
+          }
+          /* FOOTER */
+          .footer {
+            text-align: center;
+            padding: 14px 28px 10px;
+            font-size: 10px;
+            color: #9ca3af;
+            border-top: 1px solid #e5e7eb;
+            margin-top: 20px;
+          }
+        </style>
+      </head><body>
+
         <div class="header">
-          <div class="shop">${shopSettings.shop_name||'SweetCraft'}</div>
+          <div class="shop-name">${shopSettings.shop_name || 'SweetCraft'}</div>
           <h1>Daily Business Report</h1>
-          <div class="meta"><span>${dateStr}</span><span>Generated: ${new Date().toLocaleString('en-IN')}</span></div>
+          <div class="meta">
+            <span>${dateStr}</span>
+            <span>Generated: ${new Date().toLocaleString('en-IN')}</span>
+          </div>
         </div>
-        <div class="cards">
-          <div class="card green"><div class="lbl">Principle</div><div class="val">Rs.${stats.total_income}</div><div class="sub">Cash:${stats.total_cash} | Online:${stats.total_online}</div></div>
-          <div class="card red"><div class="lbl">Total Expense</div><div class="val">Rs.${stats.total_expense}</div></div>
-          <div class="card orange"><div class="lbl">Staff Pay</div><div class="val">Rs.${stats.total_staff_pay}</div></div>
-          <div class="card blue"><div class="lbl">Direct Income</div><div class="val">Rs.${stats.total_principle}</div></div>
+
+        <div class="cards-wrap">
+          <div class="cards-row">
+            <div class="card">
+              <div class="lbl">Principle</div>
+              <div class="val green">Rs.${stats.total_income}</div>
+              <div class="sub">Cash: ${stats.total_cash} &nbsp;|&nbsp; Online: ${stats.total_online}</div>
+            </div>
+            <div class="card">
+              <div class="lbl">Total Expense</div>
+              <div class="val red">Rs.${stats.total_expense}</div>
+            </div>
+            <div class="card">
+              <div class="lbl">Staff Pay</div>
+              <div class="val orange">Rs.${stats.total_staff_pay}</div>
+            </div>
+            <div class="card">
+              <div class="lbl">Direct Income</div>
+              <div class="val blue">Rs.${stats.total_principle}</div>
+            </div>
+          </div>
+          <div class="cards-row">
+            <div class="card">
+              <div class="lbl">Net Daily Sales</div>
+              <div class="val" style="color:#111">Rs.${netSale}</div>
+              <div class="sub">Expense + Staff + Direct Income - Principle</div>
+            </div>
+            <div class="card">
+              <div class="lbl">Total Income (P&amp;L)</div>
+              <div class="val ${isProfit ? 'profit-color' : 'loss-color'}">
+                ${isProfit ? 'PROFIT' : 'OVER EXPENSE'}: Rs.${Math.abs(totalIncome)}
+              </div>
+              <div class="sub">Direct Income - (Cash + Online)</div>
+            </div>
+          </div>
         </div>
-        <div class="row2">
-          <div class="row2-card"><div class="lbl">Net Daily Sales</div><div class="val">Rs.${netSale}</div><div class="sub">Expense + Staff + Direct Income - Principle</div></div>
-          <div class="row2-card"><div class="lbl">Total Income (P&amp;L)</div><div class="val ${isProfit?'profit':'loss'}">${isProfit?'PROFIT':'OVER EXPENSE'}: Rs.${Math.abs(totalIncome)}</div><div class="sub">Direct Income - (Cash + Online)</div></div>
+
+        <div class="cash-bar">
+          Total Cash in Hand: Rs.${cashInHand} &nbsp; = &nbsp; Principle + Direct Income
         </div>
-        <div class="cash-bar">Total Cash in Hand: Rs.${cashInHand} &nbsp;=&nbsp; Principle + Direct Income</div>
-        ${(reports.incomes?.length>0)?sectionTable('PRINCIPLE DETAILS',reports.incomes.length,['Mode','Description','Amount','Time'],incomeRows,`<td></td><td style="text-align:right;font-weight:900;color:#4338ca">Rs.${reports.incomes.reduce((s,r)=>s+r.amount,0).toFixed(2)}</td><td></td>`):''}
-        ${(reports.expenses?.length>0)?sectionTable('EXPENSE DETAILS',reports.expenses.length,['Item','Vendor / Status','Amount','Time'],expenseRows,`<td></td><td style="text-align:right;font-weight:900;color:#4338ca">Rs.${reports.expenses.reduce((s,r)=>s+r.amount,0).toFixed(2)}</td><td></td>`):''}
-        ${(staffAdv.length>0)?sectionTable('STAFF PAYMENT DETAILS',staffAdv.length,['Staff Name','Note','Type','Amount','Time'],staffRows,`<td></td><td style="text-align:right;font-weight:900;color:#4338ca">Rs.${staffAdv.reduce((s,r)=>s+r.amount,0).toFixed(2)}</td><td></td>`):''}
-        ${(reports.principles?.length>0)?sectionTable('DIRECT INCOME DETAILS',reports.principles.length,['Amount','Description','Time'],principleRows,`<td style="text-align:right;font-weight:900;color:#4338ca">Rs.${reports.principles.reduce((s,r)=>s+r.amount,0).toFixed(2)}</td><td colspan="2"></td>`):''}
-        <div class="footer">Powered by Poddar Solutions &nbsp;|&nbsp; Generated on ${new Date().toLocaleString('en-IN')}</div>
+
+        ${reports.incomes?.length > 0 ? `
+        <div class="section">
+          <div class="sec-header">
+            <span>PRINCIPLE DETAILS</span>
+            <span class="count">${reports.incomes.length} records</span>
+          </div>
+          <table>
+            <thead><tr><th>Mode</th><th>Description</th><th>Amount</th><th>Time</th></tr></thead>
+            <tbody>
+              ${incomeRows}
+              <tr class="total-row">
+                <td colspan="2"><b>TOTAL</b></td>
+                <td><b>Rs.${reports.incomes.reduce((s,r)=>s+r.amount,0).toFixed(2)}</b></td>
+                <td>${reports.incomes.length} records</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>` : ''}
+
+        ${reports.expenses?.length > 0 ? `
+        <div class="section">
+          <div class="sec-header">
+            <span>EXPENSE DETAILS</span>
+            <span class="count">${reports.expenses.length} records</span>
+          </div>
+          <table>
+            <thead><tr><th>Item</th><th>Vendor / Status</th><th>Amount</th><th>Time</th></tr></thead>
+            <tbody>
+              ${expenseRows}
+              <tr class="total-row">
+                <td colspan="2"><b>TOTAL</b></td>
+                <td><b>Rs.${reports.expenses.reduce((s,r)=>s+r.amount,0).toFixed(2)}</b></td>
+                <td>${reports.expenses.length} records</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>` : ''}
+
+        ${staffAdv.length > 0 ? `
+        <div class="section">
+          <div class="sec-header">
+            <span>STAFF PAYMENT DETAILS</span>
+            <span class="count">${staffAdv.length} records</span>
+          </div>
+          <table>
+            <thead><tr><th>Staff Name</th><th>Note</th><th>Type</th><th>Amount</th><th>Time</th></tr></thead>
+            <tbody>
+              ${staffRows}
+              <tr class="total-row">
+                <td colspan="3"><b>TOTAL</b></td>
+                <td><b>Rs.${staffAdv.reduce((s,r)=>s+r.amount,0).toFixed(2)}</b></td>
+                <td>${staffAdv.length} records</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>` : ''}
+
+        ${reports.principles?.length > 0 ? `
+        <div class="section">
+          <div class="sec-header">
+            <span>DIRECT INCOME DETAILS</span>
+            <span class="count">${reports.principles.length} records</span>
+          </div>
+          <table>
+            <thead><tr><th>Amount</th><th>Description</th><th>Time</th></tr></thead>
+            <tbody>
+              ${principleRows}
+              <tr class="total-row">
+                <td><b>Rs.${reports.principles.reduce((s,r)=>s+r.amount,0).toFixed(2)}</b></td>
+                <td><b>TOTAL</b></td>
+                <td>${reports.principles.length} records</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>` : ''}
+
+        <div class="footer">
+          Powered by Poddar Solutions &nbsp;|&nbsp; Generated on ${new Date().toLocaleString('en-IN')}
+        </div>
+
       </body></html>`;
 
       // Isolated iframe mein render karo - Tailwind oklch se isolated
@@ -2219,8 +2458,8 @@ function ReportsPage() {
       const iDoc = iframe.contentDocument || iframe.contentWindow.document;
       iDoc.open(); iDoc.write(html); iDoc.close();
 
-      // Font + render load hone ka wait
-      await new Promise(r => setTimeout(r, 1500));
+      // Font load hone ka wait
+      await new Promise(r => setTimeout(r, 1200));
 
       const bodyH = iDoc.body.scrollHeight;
       iframe.style.height = bodyH + 'px';

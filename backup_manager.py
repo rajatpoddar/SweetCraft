@@ -65,21 +65,44 @@ class BackupManager:
             dst.close()
 
     def _postgres_backup(self, backup_path):
-        from urllib.parse import urlparse
-        parsed = urlparse(self.db_uri)
-        env = os.environ.copy()
-        env['PGPASSWORD'] = parsed.password or ''
-        cmd = [
-            'pg_dump',
-            '-h', parsed.hostname,
-            '-p', str(parsed.port or 5432),
-            '-U', parsed.username,
-            '-d', parsed.path.lstrip('/'),
-            '-f', backup_path
-        ]
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise Exception(f"pg_dump failed: {result.stderr}")
+        """Create PostgreSQL backup using pg_dump"""
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(self.db_uri)
+            
+            # Check if pg_dump is available
+            try:
+                subprocess.run(['pg_dump', '--version'], capture_output=True, check=True)
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                logger.error("❌ pg_dump not found! Install PostgreSQL client tools.")
+                raise Exception("pg_dump command not available. Install postgresql-client package.")
+            
+            env = os.environ.copy()
+            env['PGPASSWORD'] = parsed.password or ''
+            
+            cmd = [
+                'pg_dump',
+                '-h', parsed.hostname or 'localhost',
+                '-p', str(parsed.port or 5432),
+                '-U', parsed.username or 'postgres',
+                '-d', parsed.path.lstrip('/'),
+                '-F', 'c',  # Custom format (compressed)
+                '-f', backup_path
+            ]
+            
+            logger.info(f"Running pg_dump for database: {parsed.path.lstrip('/')}")
+            result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode != 0:
+                raise Exception(f"pg_dump failed: {result.stderr}")
+            
+            logger.info(f"✅ PostgreSQL backup completed successfully")
+            
+        except subprocess.TimeoutExpired:
+            raise Exception("Backup timeout - database too large or connection slow")
+        except Exception as e:
+            logger.error(f"PostgreSQL backup error: {str(e)}")
+            raise
 
     def cleanup_old_backups(self):
         try:
@@ -122,32 +145,69 @@ class BackupManager:
             return []
 
     def restore_backup(self, backup_filename):
+        """Restore database from backup file"""
         try:
             backup_path = os.path.join(self.backup_dir, backup_filename)
             if not os.path.exists(backup_path):
                 logger.error(f"Backup not found: {backup_filename}")
                 return False
 
+            # Create safety backup before restore
             safety = f"shop_backup_before_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            logger.info(f"Creating safety backup: {safety}")
+            self.create_backup()
             
             if self.is_postgres:
                 # Restore PostgreSQL dump
                 from urllib.parse import urlparse
                 parsed = urlparse(self.db_uri)
+                
+                # Check if pg_restore is available
+                try:
+                    subprocess.run(['pg_restore', '--version'], capture_output=True, check=True)
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    logger.error("❌ pg_restore not found! Install PostgreSQL client tools.")
+                    raise Exception("pg_restore command not available. Install postgresql-client package.")
+                
                 env = os.environ.copy()
                 env['PGPASSWORD'] = parsed.password or ''
-                cmd = ['psql', '-h', parsed.hostname, '-p', str(parsed.port or 5432),
-                       '-U', parsed.username, '-d', parsed.path.lstrip('/'), '-f', backup_path]
-                result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+                
+                # First, drop and recreate database (optional - for clean restore)
+                # For safer restore, use --clean flag
+                cmd = [
+                    'pg_restore',
+                    '-h', parsed.hostname or 'localhost',
+                    '-p', str(parsed.port or 5432),
+                    '-U', parsed.username or 'postgres',
+                    '-d', parsed.path.lstrip('/'),
+                    '--clean',  # Drop objects before recreating
+                    '--if-exists',  # Don't error if objects don't exist
+                    backup_path
+                ]
+                
+                logger.info(f"Restoring PostgreSQL backup: {backup_filename}")
+                result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=300)
+                
                 if result.returncode != 0:
-                    raise Exception(f"psql restore failed: {result.stderr}")
+                    logger.warning(f"pg_restore warnings: {result.stderr}")
+                    # pg_restore often returns non-zero even on success due to warnings
+                    # Check if actual errors occurred
+                    if "ERROR" in result.stderr:
+                        raise Exception(f"pg_restore failed with errors: {result.stderr}")
+                
+                logger.info(f"✅ PostgreSQL restore completed")
             else:
+                # SQLite restore
                 if os.path.exists(self.sqlite_path):
                     shutil.copy2(self.sqlite_path, os.path.join(self.backup_dir, safety + '.db'))
                 shutil.copy2(backup_path, self.sqlite_path)
 
             logger.info(f"✅ Restored from: {backup_filename}")
             return True
+            
+        except subprocess.TimeoutExpired:
+            logger.error("❌ Restore timeout")
+            return False
         except Exception as e:
             logger.error(f"❌ Restore failed: {e}")
             return False

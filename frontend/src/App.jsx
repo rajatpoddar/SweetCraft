@@ -907,7 +907,16 @@ function StaffPage() {
 
   const handleAttendance = (id, status) => {
     const todayDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().split('T')[0];
-    shopFetch(`${API_BASE_URL}/api/staff/${id}/attendance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, date: todayDate }) }).then(fetchStaff);
+    shopFetch(`${API_BASE_URL}/api/staff/${id}/attendance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, date: todayDate }) })
+      .then(res => res.json())
+      .then(() => {
+        // Attendance mark hone ke baad staff list refresh karo
+        fetchStaff();
+      })
+      .catch(err => {
+        console.error("Attendance mark karne mein error:", err);
+        alert("Attendance mark nahi ho paya. Dobara try karein.");
+      });
   };
 
   const submitFinance = (e) => {
@@ -918,11 +927,18 @@ function StaffPage() {
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' }, 
       body: JSON.stringify({ action: payModal.action, amount: Number(payModal.amount), note: payModal.note }) 
-    }).then(() => { 
-      setPayModal({ isOpen: false, staffId: null, action: '', amount: '', note: '', currentBalance: undefined });
-      fetchStaff(); 
-      fetchTodayPay(); 
-    }).finally(() => setIsSubmitting(false));
+    })
+      .then(res => res.json())
+      .then(() => { 
+        setPayModal({ isOpen: false, staffId: null, action: '', amount: '', note: '', currentBalance: undefined });
+        // Payment ke baad staff list aur today pay dono refresh karo
+        return Promise.all([fetchStaff(), fetchTodayPay()]);
+      })
+      .catch(err => {
+        console.error("Payment process mein error:", err);
+        alert("Payment process fail ho gaya. Dobara try karein.");
+      })
+      .finally(() => setIsSubmitting(false));
   };
 
   const handleEditStaff = (staff) => {
@@ -995,11 +1011,13 @@ function StaffPage() {
     }
   };
 
-  // Search Filter
-  const filteredStaff = staffList.filter(staff => 
-    staff.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (staff.mobile && staff.mobile.includes(searchQuery))
-  );
+  // Search Filter with stable sorting by ID to prevent card jumping
+  const filteredStaff = staffList
+    .filter(staff => 
+      staff.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (staff.mobile && staff.mobile.includes(searchQuery))
+    )
+    .sort((a, b) => a.id - b.id); // Stable sort by ID to prevent jumping
 
   if (loading) {
     return (

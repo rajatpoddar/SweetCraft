@@ -40,5 +40,25 @@ services:
       - backend
     restart: always
 
+  # ── Sidecar Cron Container ──────────────────────────────────────────────────
+  # Replaces APScheduler inside Flask. Triggers the backup API every night at
+  # 2 AM using curl. This keeps the Flask process stateless and avoids issues
+  # with Gunicorn multi-worker scheduler duplication.
+  backup-cron:
+    image: alpine:3.19
+    restart: always
+    depends_on:
+      - backend
+    env_file:
+      - .env
+    # Install curl, then write a crontab and run crond in foreground
+    command: >
+      sh -c "apk add --no-cache curl &&
+             echo '0 2 * * * curl -s -X POST http://backend:5000/api/backups/create
+             -H \"X-Shop-Username: admin\"
+             -H \"X-Cron-Secret: $${CRON_SECRET:-sweetcraft_cron_2am}\"
+             >> /var/log/backup_cron.log 2>&1' | crontab - &&
+             crond -f -l 2"
+
 volumes:
   postgres_data:

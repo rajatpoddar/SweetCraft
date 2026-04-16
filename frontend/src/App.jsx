@@ -542,14 +542,45 @@ function Dashboard() {
 
   const handleIncomeSubmit = (e) => {
     e.preventDefault();
+    const amount = parseFloat(incomeForm.amount) || 0;
+    if (amount <= 0) return;
+
+    // Optimistic update: update stats immediately
+    setStats(prev => {
+      const newCash = incomeForm.payment_mode === 'Cash' ? prev.total_cash + amount : prev.total_cash;
+      const newOnline = incomeForm.payment_mode === 'Online' ? prev.total_online + amount : prev.total_online;
+      const newIncome = newCash + newOnline;
+      return {
+        ...prev,
+        total_cash: newCash,
+        total_online: newOnline,
+        total_income: newIncome,
+        net_income: prev.total_expense + prev.total_staff_pay + prev.total_principle - newIncome,
+      };
+    });
+    setIncomeForm({ payment_mode: 'Cash', amount: '', description: '' });
+
     shopFetch(API_BASE_URL + '/api/income', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(incomeForm) })
-      .then(() => { setIncomeForm({ payment_mode: 'Cash', amount: '', description: '' }); fetchStats(); });
+      .then(() => fetchStats())
+      .catch(() => { fetchStats(); }); // Reconcile on error
   };
 
   const handlePrincipleSubmit = (e) => {
     e.preventDefault();
+    const amount = parseFloat(principleForm.amount) || 0;
+    if (amount <= 0) return;
+
+    // Optimistic update
+    setStats(prev => ({
+      ...prev,
+      total_principle: prev.total_principle + amount,
+      net_income: prev.total_expense + prev.total_staff_pay + (prev.total_principle + amount) - prev.total_income,
+    }));
+    setPrincipleForm({ amount: '', description: '' });
+
     shopFetch(API_BASE_URL + '/api/principle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(principleForm) })
-      .then(() => { setPrincipleForm({ amount: '', description: '' }); fetchStats(); });
+      .then(() => fetchStats())
+      .catch(() => { fetchStats(); });
   };
 
   const getExpiryText = (dateStr) => {
@@ -887,18 +918,44 @@ function StaffPage() {
     
     if (isSubmitting) return;
     setIsSubmitting(true);
+
+    const staffData = { ...formData };
+
+    // Optimistic update: append new staff immediately
+    const tempId = `temp_${Date.now()}`;
+    const calcDailyWage = staffData.payment_type === 'Monthly'
+      ? (parseFloat(staffData.base_salary || 0) / 30).toFixed(2)
+      : parseFloat(staffData.base_salary || 0);
+    const optimisticStaff = {
+      id: tempId,
+      name: staffData.name,
+      mobile: staffData.mobile || '',
+      address: staffData.address || '',
+      payment_type: staffData.payment_type,
+      base_salary: parseFloat(staffData.base_salary || 0),
+      daily_wage: parseFloat(calcDailyWage),
+      balance: 0,
+      today_attendance: null,
+      today_paid: false,
+      _optimistic: true,
+    };
+    setStaffList(prev => [...prev, optimisticStaff]);
+    setFormData({ name: '', mobile: '', address: '', payment_type: 'Daily', base_salary: '' });
     
     shopFetch(API_BASE_URL + '/api/staff', { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify(formData) 
+      body: JSON.stringify(staffData) 
     })
-      .then(() => { 
-        setFormData({ name: '', mobile: '', address: '', payment_type: 'Daily', base_salary: '' }); 
-        fetchStaff(); 
-        alert("Staff added successfully!"); // Success Alert
+      .then(res => {
+        if (!res.ok) throw new Error('Server error');
+        // Replace optimistic entry with real server data
+        fetchStaff();
       })
       .catch(err => {
+        // Rollback optimistic update
+        setStaffList(prev => prev.filter(s => s.id !== tempId));
+        setFormData(staffData);
         console.error("Error adding staff:", err);
         alert("Error adding staff.");
       })
@@ -1333,6 +1390,22 @@ function OrdersPage() {
       items_details: selectedItems.join(', '),
     };
 
+    // Optimistic update: add a temporary order to state immediately
+    const tempId = `temp_${Date.now()}`;
+    const optimisticOrder = {
+      id: tempId,
+      ...orderData,
+      status: 'Pending',
+      is_due_cleared: orderData.advance_paid >= orderData.total_amount,
+      _optimistic: true,
+    };
+    setOrders(prev => [optimisticOrder, ...prev]);
+
+    // Reset form immediately for snappy UX
+    setFormData({ customer_name: '', phone: '', address: '', delivery_date: '', total_amount: '', advance_paid: '' });
+    setSelectedItems([]);
+    setCalculatedTotal(0);
+
     try {
       const res = await shopFetch(API_BASE_URL + '/api/orders', {
         method: 'POST',
@@ -1343,12 +1416,13 @@ function OrdersPage() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Server error: ${res.status}`);
       }
-      setFormData({ customer_name: '', phone: '', address: '', delivery_date: '', total_amount: '', advance_paid: '' });
-      setSelectedItems([]);
-      setCalculatedTotal(0);
+      // Replace optimistic entry with real server data
       fetchOrders();
-      alert("Order successfully book ho gaya!");
     } catch (err) {
+      // Rollback optimistic update on failure
+      setOrders(prev => prev.filter(o => o.id !== tempId));
+      setFormData(orderData);
+      setSelectedItems(orderData.items_details.split(', '));
       alert("Order save nahi hua: " + err.message);
     } finally {
       setIsSubmitting(false);
@@ -2085,6 +2159,7 @@ function ReportsPage() {
   const [stats, setStats] = useState({ total_income: 0, total_cash: 0, total_online: 0, total_expense: 0, total_staff_pay: 0, total_principle: 0, net_income: 0 });
   const [editModal, setEditModal] = useState({ isOpen: false, type: null, row: null });
   const [shopSettings, setShopSettings] = useState({ shop_name: localStorage.getItem('shop_name') || 'SweetCraft', tagline: '', phone: '', address: '' });
+  const [mahajans, setMahajans] = useState([]);
   
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
@@ -2105,6 +2180,10 @@ function ReportsPage() {
     shopFetch(`${API_BASE_URL}/api/settings`).then(r => r.json()).then(d => {
       if (d.shop_name) setShopSettings(d);
     }).catch(() => {});
+    shopFetch(`${API_BASE_URL}/api/mahajans`).then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setMahajans(d);
+      else if (d.mahajans) setMahajans(d.mahajans);
+    }).catch(() => {});
   }, [selectedDate]);
 
   const handleTabChange = (id) => {
@@ -2119,6 +2198,7 @@ function ReportsPage() {
     if (type === 'income') endpoint = `/api/income/${row.id}`;
     else if (type === 'principle') endpoint = `/api/principle/${row.id}`;
     else if (type === 'staff') endpoint = `/api/staff/ledger/${row.id}`;
+    else if (type === 'expense') endpoint = `/api/expenses/${row.id}`;
     await shopFetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -2135,6 +2215,7 @@ function ReportsPage() {
     if (type === 'income') endpoint = `/api/income/${id}`;
     else if (type === 'principle') endpoint = `/api/principle/${id}`;
     else if (type === 'staff') endpoint = `/api/staff/ledger/${id}`;
+    else if (type === 'expense') endpoint = `/api/expenses/${id}`;
     await shopFetch(`${API_BASE_URL}${endpoint}`, { method: 'DELETE' });
     fetchReports(selectedDate);
     fetchStats(selectedDate);
@@ -2811,7 +2892,7 @@ function ReportsPage() {
               <tr className="text-zinc-500 border-b border-zinc-100 dark:border-zinc-800 text-sm">
                 {activeTab === 'incomes' && <><th className="pb-3 pl-4">{t('Payment Mode')}</th><th className="pb-3">{t('Details')}</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th><th className="pb-3">Edit</th></>}
                 {activeTab === 'principles' && <><th className="pb-3 pl-4">Amount</th><th className="pb-3">{t('Details')}</th><th className="pb-3">{t('Date')}</th><th className="pb-3">Edit</th></>}
-                {activeTab === 'expenses' && <><th className="pb-3 pl-4">{t('Item/Detail')}</th><th className="pb-3">{t('Mahajan/Status')}</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th></>}
+                {activeTab === 'expenses' && <><th className="pb-3 pl-4">{t('Item/Detail')}</th><th className="pb-3">{t('Mahajan/Status')}</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th><th className="pb-3">Edit</th></>}
                 {activeTab === 'inventory' && <><th className="pb-3 pl-4">Item</th><th className="pb-3">{t('Action')}</th><th className="pb-3">{t('Qty')}</th><th className="pb-3">{t('Date')}</th></>}
                 {activeTab === 'returns' && <><th className="pb-3 pl-4">Item</th><th className="pb-3">{t('Return Qty')}</th><th className="pb-3">{t('Date')}</th></>}
                 {activeTab === 'staff' && <><th className="pb-3 pl-4">{t('Staff Name')}</th><th className="pb-3">{t('Details')}</th><th className="pb-3">Type</th><th className="pb-3">Amount</th><th className="pb-3">{t('Date')}</th><th className="pb-3">Edit</th></>}
@@ -2824,7 +2905,7 @@ function ReportsPage() {
                 <tr key={idx} className="border-b border-zinc-100 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-950/50">
                   {activeTab === 'incomes' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.payment_mode}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description || '-'}</td><td className="py-4 font-bold text-emerald-600">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td><td className="py-4"><div className="flex gap-1"><button onClick={() => setEditModal({ isOpen: true, type: 'income', row: {...row} })} className="p-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg hover:scale-105 transition-transform" title="Edit"><Edit size={14}/></button><button onClick={() => handleDelete('income', row.id)} className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:scale-105 transition-transform" title="Delete"><Trash2 size={14}/></button></div></td></>}
                   {activeTab === 'principles' && <><td className="py-4 pl-4 font-bold text-blue-600">₹{row.amount}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description || '-'}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td><td className="py-4"><div className="flex gap-1"><button onClick={() => setEditModal({ isOpen: true, type: 'principle', row: {...row} })} className="p-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg hover:scale-105 transition-transform" title="Edit"><Edit size={14}/></button><button onClick={() => handleDelete('principle', row.id)} className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:scale-105 transition-transform" title="Delete"><Trash2 size={14}/></button></div></td></>}
-                  {activeTab === 'expenses' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.mahajan ? `${row.mahajan} (${row.status})` : `Direct (${row.status})`}</td><td className="py-4 font-bold text-rose-600">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
+                  {activeTab === 'expenses' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.mahajan ? `${row.mahajan} (${row.status})` : `Direct (${row.status})`}</td><td className="py-4 font-bold text-rose-600">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td><td className="py-4"><div className="flex gap-1"><button onClick={() => setEditModal({ isOpen: true, type: 'expense', row: {...row, mahajan_id: row.mahajan_id || null, payment_status: row.status} })} className="p-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg hover:scale-105 transition-transform" title="Edit"><Edit size={14}/></button><button onClick={() => handleDelete('expense', row.id)} className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:scale-105 transition-transform" title="Delete"><Trash2 size={14}/></button></div></td></>}
                   {activeTab === 'inventory' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${row.action === 'Add' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{row.action}</span></td><td className="py-4 font-medium dark:text-white">{row.quantity}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                   {activeTab === 'returns' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.item_name}</td><td className="py-4 font-medium dark:text-white">{row.quantity}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td></>}
                   {activeTab === 'staff' && <><td className="py-4 pl-4 font-bold dark:text-white">{row.staff_name}</td><td className="py-4 text-sm dark:text-zinc-300">{row.description}</td><td className="py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${row.txn_type === 'Advance' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{row.txn_type}</span></td><td className="py-4 font-bold dark:text-white">₹{row.amount}</td><td className="py-4 text-sm text-zinc-500">{row.date}</td><td className="py-4"><div className="flex gap-1"><button onClick={() => setEditModal({ isOpen: true, type: 'staff', row: {...row} })} className="p-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg hover:scale-105 transition-transform" title="Edit"><Edit size={14}/></button><button onClick={() => handleDelete('staff', row.id)} className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:scale-105 transition-transform" title="Delete"><Trash2 size={14}/></button></div></td></>}
@@ -2903,13 +2984,13 @@ function ReportsPage() {
         )}
       </div>
 
-      {/* Edit Income/Principle Modal */}
+      {/* Edit Income/Principle/Expense Modal */}
       {editModal.isOpen && editModal.row && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-center z-[100] p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl border border-zinc-200 dark:border-zinc-800 relative animate-fade-in">
             <button onClick={() => setEditModal({ isOpen: false, type: null, row: null })} className="absolute top-6 right-6 p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"><X size={20} /></button>
             <h2 className="text-2xl font-black mb-6 dark:text-white">
-              {editModal.type === 'income' ? 'Edit Income Entry' : editModal.type === 'staff' ? 'Edit Staff Payment' : 'Edit Principle Entry'}
+              {editModal.type === 'income' ? 'Edit Income Entry' : editModal.type === 'staff' ? 'Edit Staff Payment' : editModal.type === 'expense' ? 'Edit Expense Entry' : 'Edit Principle Entry'}
             </h2>
             <form onSubmit={handleEditSave} className="space-y-4">
               {editModal.type === 'income' && (
@@ -2920,8 +3001,32 @@ function ReportsPage() {
                   Staff: <span className="text-zinc-900 dark:text-white font-bold">{editModal.row.staff_name}</span> &nbsp;|&nbsp; Type: <span className={`font-bold ${editModal.row.txn_type === 'Advance' ? 'text-red-600' : 'text-emerald-600'}`}>{editModal.row.txn_type}</span>
                 </div>
               )}
+              {editModal.type === 'expense' && (
+                <>
+                  <UI_Input label="Item Name" value={editModal.row.item_name || ''} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, item_name: e.target.value}}))} required />
+                  <UI_Select
+                    label="Payment Status"
+                    options={[{label:'Paid (Direct)', value:'Paid'},{label:'Credit (Mahajan Udhari)', value:'Credit'}]}
+                    value={editModal.row.payment_status || 'Paid'}
+                    onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, payment_status: e.target.value}}))}
+                  />
+                  <div>
+                    <label className="block text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-2 ml-1">Mahajan (Optional)</label>
+                    <select
+                      className="w-full bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-purple-500 transition-all text-zinc-900 dark:text-white"
+                      value={editModal.row.mahajan_id || ''}
+                      onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, mahajan_id: e.target.value || null}}))}
+                    >
+                      <option value="">-- No Mahajan (Direct) --</option>
+                      {mahajans.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
               <UI_Input label="Amount (₹)" type="number" value={editModal.row.amount} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, amount: e.target.value}}))} required />
-              <UI_Input label="Details (Optional)" value={editModal.row.description || ''} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, description: e.target.value}}))} />
+              {editModal.type !== 'expense' && (
+                <UI_Input label="Details (Optional)" value={editModal.row.description || ''} onChange={e => setEditModal(prev => ({...prev, row: {...prev.row, description: e.target.value}}))} />
+              )}
               <div className="pt-2"><UI_Button type="submit" variant="primary">Save Changes</UI_Button></div>
             </form>
           </div>
@@ -3905,6 +4010,12 @@ function SuperAdminSection({ isDarkMode, toggleTheme }) {
   const [loading, setLoading] = useState(false);
   const [addModal, setAddModal] = useState(false);
   const [newShop, setNewShop] = useState({ shop_name: '', owner_name: '', phone: '', city: '', admin_username: '', admin_password: '', plan: 'Free' });
+  // Superadmin password (re-entered for sensitive actions)
+  const [saPassword, setSaPassword] = useState(() => sessionStorage.getItem('sa_password') || '');
+  // Reset password modal
+  const [resetModal, setResetModal] = useState({ isOpen: false, shop: null, newPassword: '' });
+  // Impersonation / view reports modal
+  const [impersonateModal, setImpersonateModal] = useState({ isOpen: false, shop: null, loading: false, data: null, error: null, date: new Date().toISOString().split('T')[0] });
 
   useEffect(() => { if (isSAAuth) fetchShops(); }, [isSAAuth]);
 
@@ -3913,7 +4024,12 @@ function SuperAdminSection({ isDarkMode, toggleTheme }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     const res = await fetch(`${API_BASE_URL}/api/superadmin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-    if (res.ok) { sessionStorage.setItem('sa_auth', 'true'); setIsSAAuth(true); }
+    if (res.ok) {
+      sessionStorage.setItem('sa_auth', 'true');
+      sessionStorage.setItem('sa_password', password); // Store for sensitive API calls
+      setSaPassword(password);
+      setIsSAAuth(true);
+    }
     else { const d = await res.json(); setError(d.error || 'Invalid credentials'); }
   };
 
@@ -3930,7 +4046,44 @@ function SuperAdminSection({ isDarkMode, toggleTheme }) {
     fetchShops();
   };
 
-  const logout = () => { sessionStorage.removeItem('sa_auth'); setIsSAAuth(false); };
+  const logout = () => { sessionStorage.removeItem('sa_auth'); sessionStorage.removeItem('sa_password'); setIsSAAuth(false); setSaPassword(''); };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    const { shop, newPassword } = resetModal;
+    if (!newPassword || newPassword.length < 6) return alert('Password must be at least 6 characters');
+    const res = await fetch(`${API_BASE_URL}/api/superadmin/shops/${shop.id}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-SuperAdmin-Auth': saPassword },
+      body: JSON.stringify({ new_password: newPassword })
+    });
+    const d = await res.json();
+    if (res.ok) { alert(d.message); setResetModal({ isOpen: false, shop: null, newPassword: '' }); }
+    else alert(d.error || 'Reset failed');
+  };
+
+  const handleImpersonate = async (shop, date) => {
+    setImpersonateModal(prev => ({ ...prev, loading: true, error: null, data: null }));
+    try {
+      // Step 1: Get impersonation token
+      const tokenRes = await fetch(`${API_BASE_URL}/api/superadmin/shops/${shop.id}/impersonate`, {
+        method: 'POST',
+        headers: { 'X-SuperAdmin-Auth': saPassword }
+      });
+      if (!tokenRes.ok) { const d = await tokenRes.json(); throw new Error(d.error || 'Failed to get token'); }
+      const { token } = await tokenRes.json();
+
+      // Step 2: Fetch stats using the token
+      const statsRes = await fetch(`${API_BASE_URL}/api/superadmin/impersonate/stats?date=${date}`, {
+        headers: { 'X-Impersonation-Token': token }
+      });
+      if (!statsRes.ok) { const d = await statsRes.json(); throw new Error(d.error || 'Failed to fetch stats'); }
+      const data = await statsRes.json();
+      setImpersonateModal(prev => ({ ...prev, loading: false, data }));
+    } catch (err) {
+      setImpersonateModal(prev => ({ ...prev, loading: false, error: err.message }));
+    }
+  };
 
   if (!isSAAuth) return (
     <div className={`min-h-screen flex items-center justify-center p-4 bg-zinc-950 font-sans ${isDarkMode ? 'dark' : ''}`}>
@@ -3985,9 +4138,25 @@ function SuperAdminSection({ isDarkMode, toggleTheme }) {
                   <p className="text-zinc-400 text-sm mt-1">{shop.owner_name} • {shop.city} • @{shop.admin_username}</p>
                   <p className="text-zinc-600 text-xs mt-0.5">Joined: {shop.joined_date} | Phone: {shop.phone}</p>
                 </div>
-                <button onClick={() => toggleShop(shop.id)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all active:scale-95 flex-shrink-0 ${shop.is_active ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50' : 'bg-emerald-900/30 text-emerald-400 hover:bg-emerald-900/50'}`}>
-                  {shop.is_active ? <><ToggleRight size={18}/> Suspend</> : <><ToggleLeft size={18}/> Activate</>}
-                </button>
+                <div className="flex flex-wrap gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => setImpersonateModal({ isOpen: true, shop, loading: false, data: null, error: null, date: new Date().toISOString().split('T')[0] })}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs bg-blue-900/30 text-blue-400 hover:bg-blue-900/50 transition-all active:scale-95"
+                    title="View shop reports"
+                  >
+                    <ReceiptText size={14}/> View Reports
+                  </button>
+                  <button
+                    onClick={() => setResetModal({ isOpen: true, shop, newPassword: '' })}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs bg-amber-900/30 text-amber-400 hover:bg-amber-900/50 transition-all active:scale-95"
+                    title="Reset shop admin password"
+                  >
+                    <Settings size={14}/> Reset Password
+                  </button>
+                  <button onClick={() => toggleShop(shop.id)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all active:scale-95 ${shop.is_active ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50' : 'bg-emerald-900/30 text-emerald-400 hover:bg-emerald-900/50'}`}>
+                    {shop.is_active ? <><ToggleRight size={18}/> Suspend</> : <><ToggleLeft size={18}/> Activate</>}
+                  </button>
+                </div>
               </div>
             ))}
             {shops.length === 0 && <div className="text-center py-12 text-zinc-600">Koi shop registered nahi hai abhi.</div>}
@@ -4016,6 +4185,102 @@ function SuperAdminSection({ isDarkMode, toggleTheme }) {
                 <button type="submit" className="flex-1 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black transition-all">Register Shop</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetModal.isOpen && resetModal.shop && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] p-8 w-full max-w-sm">
+            <h2 className="text-xl font-black mb-1 text-white">Reset Password</h2>
+            <p className="text-zinc-400 text-sm mb-6">@{resetModal.shop.admin_username} — {resetModal.shop.shop_name}</p>
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <input
+                type="password"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-amber-500"
+                placeholder="New Password (min 6 chars)"
+                value={resetModal.newPassword}
+                onChange={e => setResetModal(prev => ({...prev, newPassword: e.target.value}))}
+                required
+                minLength={6}
+              />
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setResetModal({ isOpen: false, shop: null, newPassword: '' })} className="flex-1 py-3 rounded-2xl bg-zinc-800 text-zinc-300 font-bold">Cancel</button>
+                <button type="submit" className="flex-1 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-black transition-all">Reset</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Impersonate / View Reports Modal */}
+      {impersonateModal.isOpen && impersonateModal.shop && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-start justify-center z-[100] p-4 overflow-y-auto pt-16">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] p-8 w-full max-w-lg my-4">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-xl font-black text-white">View Reports</h2>
+                <p className="text-zinc-400 text-sm mt-1">{impersonateModal.shop.shop_name} — @{impersonateModal.shop.admin_username}</p>
+              </div>
+              <button onClick={() => setImpersonateModal({ isOpen: false, shop: null, loading: false, data: null, error: null, date: new Date().toISOString().split('T')[0] })} className="p-2 rounded-full bg-zinc-800 text-zinc-400 hover:bg-zinc-700">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex gap-3 mb-6">
+              <input
+                type="date"
+                value={impersonateModal.date}
+                onChange={e => setImpersonateModal(prev => ({...prev, date: e.target.value, data: null}))}
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+              <button
+                onClick={() => handleImpersonate(impersonateModal.shop, impersonateModal.date)}
+                disabled={impersonateModal.loading}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-50"
+              >
+                {impersonateModal.loading ? 'Loading...' : 'Fetch'}
+              </button>
+            </div>
+
+            {impersonateModal.error && (
+              <div className="bg-red-900/30 border border-red-800 rounded-xl p-4 text-red-400 text-sm font-medium mb-4">
+                {impersonateModal.error}
+              </div>
+            )}
+
+            {impersonateModal.data && (
+              <div className="space-y-3">
+                <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">
+                  {new Date(impersonateModal.data.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Principle (Sale)', value: impersonateModal.data.stats.total_income, color: 'text-emerald-400' },
+                    { label: 'Total Expense', value: impersonateModal.data.stats.total_expense, color: 'text-rose-400' },
+                    { label: 'Staff Pay', value: impersonateModal.data.stats.total_staff_pay, color: 'text-orange-400' },
+                    { label: 'Direct Income', value: impersonateModal.data.stats.total_principle, color: 'text-blue-400' },
+                    { label: 'Cash', value: impersonateModal.data.stats.total_cash, color: 'text-zinc-300' },
+                    { label: 'Online', value: impersonateModal.data.stats.total_online, color: 'text-zinc-300' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-zinc-800 rounded-xl p-4">
+                      <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">{item.label}</p>
+                      <p className={`text-2xl font-black ${item.color}`}>₹{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-zinc-800 rounded-xl p-4 border border-zinc-700">
+                  <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">Net Daily Sales</p>
+                  <p className="text-3xl font-black text-white">₹{impersonateModal.data.stats.net_income}</p>
+                  <p className="text-zinc-600 text-xs mt-1">Expense + Staff + Direct Income − Principle</p>
+                </div>
+              </div>
+            )}
+
+            {!impersonateModal.data && !impersonateModal.loading && !impersonateModal.error && (
+              <p className="text-zinc-600 text-sm text-center py-6">Select a date and click Fetch to view this shop's daily metrics.</p>
+            )}
           </div>
         </div>
       )}

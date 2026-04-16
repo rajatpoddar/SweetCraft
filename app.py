@@ -1,15 +1,21 @@
 import os
 import re
+import secrets
 from werkzeug.utils import secure_filename
 from flask import Flask, jsonify, request, g, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
+
+def hash_password(password):
+    """
+    Cross-platform password hashing.
+    Uses pbkdf2:sha256 explicitly — avoids scrypt which requires
+    OpenSSL on macOS/Python 3.9 (macOS ships LibreSSL without scrypt support).
+    """
+    return generate_password_hash(password, method='pbkdf2:sha256')
 from dotenv import load_dotenv
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-import atexit
 from backup_manager import BackupManager
 
 load_dotenv()
@@ -43,23 +49,11 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 # Initialize Backup Manager
 backup_manager = BackupManager()
 
-# Initialize Scheduler for automatic backups
-scheduler = BackgroundScheduler()
-scheduler.start()
+# In-memory store for short-lived impersonation tokens
+# { token: { 'shop_username': str, 'expires_at': datetime } }
+_impersonation_tokens = {}
 
-# Schedule daily backup at 2 AM
-scheduler.add_job(
-    func=backup_manager.perform_daily_backup,
-    trigger=CronTrigger(hour=2, minute=0),  # Daily at 2:00 AM
-    id='daily_backup',
-    name='Daily Database Backup',
-    replace_existing=True
-)
-
-# Shutdown scheduler when app exits
-atexit.register(lambda: scheduler.shutdown())
-
-print("✅ Automatic backup scheduler initialized - Daily backups at 2:00 AM")
+print("✅ Backend initialized - Backup scheduler moved to sidecar cron container")
 
 # --- MULTI-TENANT HELPER ---
 def get_shop_id():
@@ -255,7 +249,7 @@ with app.app_context():
     db.create_all()
     if not Admin.query.filter_by(username='admin').first():
         admin_pass = os.getenv('ADMIN_PASSWORD', 'admin123')
-        hashed_pw = generate_password_hash(admin_pass)
+        hashed_pw = hash_password(admin_pass)
         new_admin = Admin(username='admin', password_hash=hashed_pw)
         db.session.add(new_admin)
         db.session.flush()
@@ -264,7 +258,7 @@ with app.app_context():
             db.session.add(ShopSettings(shop_id=1))
     if not SuperAdmin.query.filter_by(username='superadmin').first():
         sa_pass = os.getenv('SUPERADMIN_PASSWORD', 'superadmin123')
-        hashed_sa = generate_password_hash(sa_pass)
+        hashed_sa = hash_password(sa_pass)
         db.session.add(SuperAdmin(username='superadmin', password_hash=hashed_sa))
     # Ensure shop_id=1 settings exist
     admin_obj = Admin.query.filter_by(username='admin').first()
@@ -352,42 +346,50 @@ def get_dashboard_stats():
     date_param = request.args.get('date')
     today = datetime.strptime(date_param, '%Y-%m-%d').date() if date_param else datetime.today().date()
 
+    # Efficient range query — avoids db.func.date() sequential scans
+    start_of_day = datetime.combine(today, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
+
     # Staff ke jo staff is shop ke hain unka advance
     shop_staff_ids = [s.id for s in Staff.query.filter_by(shop_id=sid).all()]
     staff_logs = Ledger.query.filter(
         Ledger.staff_id.in_(shop_staff_ids),
-        db.func.date(Ledger.date_time) == today,
+        Ledger.date_time >= start_of_day,
+        Ledger.date_time < end_of_day,
         Ledger.txn_type == 'Advance'
     ).all() if shop_staff_ids else []
     total_staff_pay = sum(l.amount for l in staff_logs)
 
     expenses = DailyExpense.query.filter(
         DailyExpense.shop_id == sid,
-        db.func.date(DailyExpense.date_time) == today
+        DailyExpense.date_time >= start_of_day,
+        DailyExpense.date_time < end_of_day
     ).all()
     total_expense = sum(e.amount for e in expenses)
 
     incomes = DailyIncome.query.filter(
         DailyIncome.shop_id == sid,
-        db.func.date(DailyIncome.date_time) == today
+        DailyIncome.date_time >= start_of_day,
+        DailyIncome.date_time < end_of_day
     ).all()
     total_cash = sum(i.amount for i in incomes if i.payment_mode == 'Cash')
     total_online = sum(i.amount for i in incomes if i.payment_mode == 'Online')
     total_income = total_cash + total_online
-    
+
     # Principle calculation
     principles = DailyPrinciple.query.filter(
         DailyPrinciple.shop_id == sid,
-        db.func.date(DailyPrinciple.date_time) == today
+        DailyPrinciple.date_time >= start_of_day,
+        DailyPrinciple.date_time < end_of_day
     ).all()
     total_principle = sum(p.amount for p in principles)
-    
+
     # New calculation: Net Income = Total Expense + Staff Pay + Principle - (Cash + Online)
     net_income = total_expense + total_staff_pay + total_principle - total_income
 
     return jsonify({
         "total_income": total_income, "total_cash": total_cash, "total_online": total_online,
-        "total_expense": total_expense, "total_staff_pay": total_staff_pay, 
+        "total_expense": total_expense, "total_staff_pay": total_staff_pay,
         "total_principle": total_principle, "net_income": net_income
     })
 
@@ -497,18 +499,22 @@ def manage_staff():
     client_date_str = request.args.get('date')
     today = datetime.strptime(client_date_str, '%Y-%m-%d').date() if client_date_str else (datetime.utcnow() + timedelta(hours=5, minutes=30)).date()
 
+    start_of_day = datetime.combine(today, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
+
     staff_list = Staff.query.filter_by(shop_id=sid).order_by(Staff.id.asc()).all()
     result = []
     for s in staff_list:
         att = Attendance.query.filter_by(staff_id=s.id, date=today).first()
-        
-        # Aaj ka Advance payment check karna
+
+        # Aaj ka Advance payment check karna — range query to avoid sequential scan
         today_paid_record = Ledger.query.filter(
             Ledger.staff_id == s.id,
             Ledger.txn_type == 'Advance',
-            db.func.date(Ledger.date_time) == today
+            Ledger.date_time >= start_of_day,
+            Ledger.date_time < end_of_day
         ).first()
-        
+
         today_paid = today_paid_record is not None
 
         result.append({
@@ -530,10 +536,13 @@ def manage_staff():
 def get_today_staff_pay():
     sid = get_shop_id()
     today = datetime.today().date()
+    start_of_day = datetime.combine(today, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
     shop_staff_ids = [s.id for s in Staff.query.filter_by(shop_id=sid).all()]
     logs = Ledger.query.filter(
         Ledger.staff_id.in_(shop_staff_ids),
-        db.func.date(Ledger.date_time) == today,
+        Ledger.date_time >= start_of_day,
+        Ledger.date_time < end_of_day,
         Ledger.txn_type == 'Advance'
     ).all() if shop_staff_ids else []
     return jsonify({"total_pay_today": sum(l.amount for l in logs)})
@@ -733,11 +742,19 @@ def manage_customers():
 
     customers = Customer.query.filter_by(shop_id=sid).all()
     today = datetime.today().date()
+    start_of_day = datetime.combine(today, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
     today_udhar = 0
-    # CustomerLedger se aaj ka udhar
-    for c in customers:
-        logs = CustomerLedger.query.filter(CustomerLedger.customer_id == c.id, db.func.date(CustomerLedger.date_time) == today, CustomerLedger.amount > 0).all()
-        for log in logs:
+    # CustomerLedger se aaj ka udhar — single query instead of N+1 loop
+    if customers:
+        cust_ids = [c.id for c in customers]
+        today_logs = CustomerLedger.query.filter(
+            CustomerLedger.customer_id.in_(cust_ids),
+            CustomerLedger.date_time >= start_of_day,
+            CustomerLedger.date_time < end_of_day,
+            CustomerLedger.amount > 0
+        ).all()
+        for log in today_logs:
             if 'Due' in log.txn_type or 'Udhar Given' in log.txn_type:
                 today_udhar += log.amount
                 
@@ -837,9 +854,15 @@ def manage_expenses():
         return jsonify({"message": "Expense added!"}), 201
 
     today = datetime.today().date()
+    start_of_day = datetime.combine(today, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
     expenses = (db.session.query(DailyExpense, Mahajan.name)
                 .outerjoin(Mahajan, DailyExpense.mahajan_id == Mahajan.id)
-                .filter(DailyExpense.shop_id == sid, db.func.date(DailyExpense.date_time) == today)
+                .filter(
+                    DailyExpense.shop_id == sid,
+                    DailyExpense.date_time >= start_of_day,
+                    DailyExpense.date_time < end_of_day
+                )
                 .all())
     total = sum(e[0].amount for e in expenses)
     return jsonify({
@@ -855,6 +878,76 @@ def delete_expense(id):
     db.session.delete(expense)
     db.session.commit()
     return jsonify({"message": "Expense deleted!"})
+
+
+@app.route('/api/expenses/<int:id>', methods=['PUT'])
+def update_expense(id):
+    """
+    Expense edit karo. Mahajan balance correctly adjust hoga:
+    - Pehle purana mahajan effect reverse karo
+    - Phir naya mahajan effect apply karo
+    """
+    sid = get_shop_id()
+    expense = DailyExpense.query.filter_by(id=id, shop_id=sid).first_or_404()
+    data = request.json
+
+    old_amount = expense.amount
+    old_mahajan_id = expense.mahajan_id
+    old_status = expense.payment_status
+
+    new_amount = float(data.get('amount', old_amount))
+    new_mahajan_id = data.get('mahajan_id') or None
+    if new_mahajan_id:
+        new_mahajan_id = int(new_mahajan_id)
+    new_status = data.get('payment_status', old_status)
+    new_item_name = data.get('item_name', expense.item_name)
+
+    # --- Step 1: Reverse old mahajan effect ---
+    if old_mahajan_id:
+        old_mahajan = Mahajan.query.filter_by(id=old_mahajan_id, shop_id=sid).first()
+        if old_mahajan:
+            if old_status == 'Credit':
+                old_mahajan.balance -= old_amount   # reverse udhari
+            elif old_status == 'Paid':
+                old_mahajan.balance += old_amount   # reverse payment
+            db.session.add(MahajanLedger(
+                mahajan_id=old_mahajan.id,
+                txn_type='Edit Reversal',
+                amount=old_amount,
+                description=f"Reversal: edit of expense #{id}"
+            ))
+
+    # --- Step 2: Apply new mahajan effect ---
+    if new_mahajan_id:
+        new_mahajan = Mahajan.query.filter_by(id=new_mahajan_id, shop_id=sid).first()
+        if new_mahajan:
+            if new_status == 'Credit':
+                new_mahajan.balance += new_amount
+                db.session.add(MahajanLedger(
+                    mahajan_id=new_mahajan.id,
+                    txn_type='Udhar',
+                    amount=new_amount,
+                    description=f"{new_item_name} (edited expense #{id})"
+                ))
+            elif new_status == 'Paid':
+                new_mahajan.balance -= new_amount
+                db.session.add(MahajanLedger(
+                    mahajan_id=new_mahajan.id,
+                    txn_type='Payment',
+                    amount=new_amount,
+                    description=f"Payment for {new_item_name} (edited expense #{id})"
+                ))
+
+    # --- Step 3: Update expense record ---
+    expense.item_name = new_item_name
+    expense.amount = new_amount
+    expense.mahajan_id = new_mahajan_id
+    expense.payment_status = new_status
+    expense.quantity = float(data.get('quantity', expense.quantity))
+    expense.unit = data.get('unit', expense.unit)
+
+    db.session.commit()
+    return jsonify({"message": "Expense updated!"})
 
 
 # ============================================================
@@ -950,56 +1043,71 @@ def edit_delete_staff_ledger(id):
 def get_all_reports():
     sid = get_shop_id()
     date_param = request.args.get('date')
-    
+
     if date_param:
         target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
-        # Filter by specific date
+        # Efficient range query — avoids db.func.date() sequential scans
+        start_of_day = datetime.combine(target_date, datetime.min.time())
+        end_of_day = start_of_day + timedelta(days=1)
+
         inv_logs = InventoryLog.query.filter(
             InventoryLog.shop_id == sid,
-            db.func.date(InventoryLog.date_time) == target_date
+            InventoryLog.date_time >= start_of_day,
+            InventoryLog.date_time < end_of_day
         ).order_by(InventoryLog.date_time.desc()).all()
-        
+
         ret_items = ReturnedItem.query.filter(
             ReturnedItem.shop_id == sid,
-            db.func.date(ReturnedItem.return_date) == target_date
+            ReturnedItem.return_date >= start_of_day,
+            ReturnedItem.return_date < end_of_day
         ).order_by(ReturnedItem.return_date.desc()).all()
-        
+
         income_logs = DailyIncome.query.filter(
             DailyIncome.shop_id == sid,
-            db.func.date(DailyIncome.date_time) == target_date
+            DailyIncome.date_time >= start_of_day,
+            DailyIncome.date_time < end_of_day
         ).order_by(DailyIncome.date_time.desc()).all()
-        
+
         principle_logs = DailyPrinciple.query.filter(
             DailyPrinciple.shop_id == sid,
-            db.func.date(DailyPrinciple.date_time) == target_date
+            DailyPrinciple.date_time >= start_of_day,
+            DailyPrinciple.date_time < end_of_day
         ).order_by(DailyPrinciple.date_time.desc()).all()
-        
+
         expense_logs = (db.session.query(DailyExpense, Mahajan.name)
                         .outerjoin(Mahajan, DailyExpense.mahajan_id == Mahajan.id)
-                        .filter(DailyExpense.shop_id == sid)
-                        .filter(db.func.date(DailyExpense.date_time) == target_date)
+                        .filter(
+                            DailyExpense.shop_id == sid,
+                            DailyExpense.date_time >= start_of_day,
+                            DailyExpense.date_time < end_of_day
+                        )
                         .order_by(DailyExpense.date_time.desc()).all())
-        
+
         # Mahajan bills for specific date
         mahajan_bills = (db.session.query(MahajanBill, Mahajan.name)
                         .join(Mahajan, MahajanBill.mahajan_id == Mahajan.id)
-                        .filter(MahajanBill.shop_id == sid)
-                        .filter(MahajanBill.date == target_date)
+                        .filter(MahajanBill.shop_id == sid, MahajanBill.date == target_date)
                         .order_by(MahajanBill.date.desc()).all())
-        
+
         # Staff logs for specific date
         shop_staff_ids = [s.id for s in Staff.query.filter_by(shop_id=sid).all()]
         staff_logs_q = (db.session.query(Ledger, Staff.name)
                         .join(Staff, Ledger.staff_id == Staff.id)
-                        .filter(Staff.shop_id == sid)
-                        .filter(db.func.date(Ledger.date_time) == target_date)
+                        .filter(
+                            Staff.shop_id == sid,
+                            Ledger.date_time >= start_of_day,
+                            Ledger.date_time < end_of_day
+                        )
                         .order_by(Ledger.date_time.desc()).all()) if shop_staff_ids else []
-        
+
         # Customer logs for specific date
         cust_logs_q = (db.session.query(CustomerLedger, Customer.name)
                        .join(Customer, CustomerLedger.customer_id == Customer.id)
-                       .filter(Customer.shop_id == sid)
-                       .filter(db.func.date(CustomerLedger.date_time) == target_date)
+                       .filter(
+                           Customer.shop_id == sid,
+                           CustomerLedger.date_time >= start_of_day,
+                           CustomerLedger.date_time < end_of_day
+                       )
                        .order_by(CustomerLedger.date_time.desc()).all())
     else:
         # Default: show last 200 records
@@ -1117,11 +1225,19 @@ def manage_mahajans():
 
     mahajans = Mahajan.query.filter_by(shop_id=sid).all()
     today = datetime.today().date()
+    start_of_day = datetime.combine(today, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
     today_udhar = 0
-    # MahajanLedger se aaj ka udhar (expenses done on credit)
-    for m in mahajans:
-        logs = MahajanLedger.query.filter(MahajanLedger.mahajan_id == m.id, db.func.date(MahajanLedger.date_time) == today, MahajanLedger.txn_type == 'Udhar').all()
-        today_udhar += sum(l.amount for l in logs)
+    # MahajanLedger se aaj ka udhar — single query instead of N+1 loop
+    if mahajans:
+        mahajan_ids = [m.id for m in mahajans]
+        today_logs = MahajanLedger.query.filter(
+            MahajanLedger.mahajan_id.in_(mahajan_ids),
+            MahajanLedger.date_time >= start_of_day,
+            MahajanLedger.date_time < end_of_day,
+            MahajanLedger.txn_type == 'Udhar'
+        ).all()
+        today_udhar = sum(l.amount for l in today_logs)
         
     return jsonify({
         "mahajans": [{"id": m.id, "name": m.name, "phone": m.phone, "balance": m.balance} for m in mahajans],
@@ -1361,7 +1477,7 @@ def change_admin_password():
     if not check_password_hash(admin.password_hash, old_pw):
         return jsonify({"error": "Purana password galat hai!"}), 400
         
-    admin.password_hash = generate_password_hash(new_pw)
+    admin.password_hash = hash_password(new_pw)
     db.session.commit()
     return jsonify({"message": "Password changed successfully!"})
 
@@ -1411,13 +1527,28 @@ def list_backups():
 
 @app.route('/api/backups/create', methods=['POST'])
 def create_manual_backup():
-    """Create a manual backup immediately"""
+    """Create a manual backup immediately.
+    
+    Can be called by:
+    - Authenticated shop admin (normal use)
+    - Sidecar cron container via X-Cron-Secret header
+    """
+    # Allow cron sidecar to trigger backup without shop auth
+    cron_secret = request.headers.get('X-Cron-Secret', '')
+    expected_secret = os.getenv('CRON_SECRET', 'sweetcraft_cron_2am')
+    is_cron = cron_secret == expected_secret
+
+    if not is_cron:
+        # For manual calls, just proceed (existing behavior — shop admin is authenticated via frontend)
+        pass
+
     try:
         backup_path = backup_manager.create_backup()
         if backup_path:
             return jsonify({
                 'message': 'Backup created successfully',
-                'backup_path': backup_path
+                'backup_path': backup_path,
+                'triggered_by': 'cron' if is_cron else 'manual'
             }), 200
         else:
             return jsonify({'error': 'Failed to create backup'}), 500
@@ -1480,20 +1611,25 @@ def reset_today_entry():
     """Sirf aaj ka income, principle, aur expense entries delete karo"""
     sid = get_shop_id()
     today = datetime.today().date()
+    start_of_day = datetime.combine(today, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
 
     DailyIncome.query.filter(
         DailyIncome.shop_id == sid,
-        db.func.date(DailyIncome.date_time) == today
+        DailyIncome.date_time >= start_of_day,
+        DailyIncome.date_time < end_of_day
     ).delete(synchronize_session=False)
 
     DailyPrinciple.query.filter(
         DailyPrinciple.shop_id == sid,
-        db.func.date(DailyPrinciple.date_time) == today
+        DailyPrinciple.date_time >= start_of_day,
+        DailyPrinciple.date_time < end_of_day
     ).delete(synchronize_session=False)
 
     DailyExpense.query.filter(
         DailyExpense.shop_id == sid,
-        db.func.date(DailyExpense.date_time) == today
+        DailyExpense.date_time >= start_of_day,
+        DailyExpense.date_time < end_of_day
     ).delete(synchronize_session=False)
 
     db.session.commit()
@@ -1528,7 +1664,7 @@ def manage_shops():
             if not Admin.query.filter_by(username=data['admin_username']).first():
                 new_admin = Admin(
                     username=data['admin_username'],
-                    password_hash=generate_password_hash(data['admin_password'])
+                    password_hash=hash_password(data['admin_password'])
                 )
                 db.session.add(new_admin)
                 db.session.flush()  # Get admin ID before commit
@@ -1567,6 +1703,155 @@ def delete_shop(id):
     db.session.delete(shop)
     db.session.commit()
     return jsonify({'message': 'Shop deleted!'})
+
+
+# ============================================================
+#  SUPERADMIN POWER ENDPOINTS
+# ============================================================
+
+@app.route('/api/superadmin/shops/<int:id>/reset-password', methods=['POST'])
+def superadmin_reset_password(id):
+    """
+    Superadmin can reset any shop admin's password.
+    Requires X-SuperAdmin-Auth header with the superadmin password.
+    """
+    # Simple auth check via header
+    sa_password = request.headers.get('X-SuperAdmin-Auth', '')
+    sa = SuperAdmin.query.first()
+    if not sa or not check_password_hash(sa.password_hash, sa_password):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    shop = ShopOwner.query.get_or_404(id)
+    data = request.json or {}
+    new_password = data.get('new_password', '')
+    if not new_password or len(new_password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+
+    admin = Admin.query.filter_by(username=shop.admin_username).first()
+    if not admin:
+        return jsonify({'error': 'Admin account not found for this shop'}), 404
+
+    admin.password_hash = hash_password(new_password)
+    db.session.commit()
+    return jsonify({'message': f"Password reset successful for @{shop.admin_username}"}), 200
+
+
+@app.route('/api/superadmin/shops/<int:id>/impersonate', methods=['POST'])
+def superadmin_impersonate(id):
+    """
+    Generate a short-lived impersonation token (valid 15 minutes).
+    The token can be passed as X-Impersonation-Token header to bypass
+    standard X-Shop-Username auth and fetch reports for any shop.
+    Requires X-SuperAdmin-Auth header.
+    """
+    sa_password = request.headers.get('X-SuperAdmin-Auth', '')
+    sa = SuperAdmin.query.first()
+    if not sa or not check_password_hash(sa.password_hash, sa_password):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    shop = ShopOwner.query.get_or_404(id)
+    if not shop.admin_username:
+        return jsonify({'error': 'Shop has no admin username configured'}), 400
+
+    # Generate a cryptographically secure token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+
+    # Purge expired tokens to keep memory clean
+    expired = [t for t, v in _impersonation_tokens.items() if v['expires_at'] < datetime.utcnow()]
+    for t in expired:
+        del _impersonation_tokens[t]
+
+    _impersonation_tokens[token] = {
+        'shop_username': shop.admin_username,
+        'expires_at': expires_at
+    }
+
+    return jsonify({
+        'token': token,
+        'shop_username': shop.admin_username,
+        'shop_name': shop.shop_name,
+        'expires_at': expires_at.isoformat() + 'Z',
+        'expires_in_seconds': 900
+    }), 200
+
+
+@app.route('/api/superadmin/impersonate/stats', methods=['GET'])
+def superadmin_impersonate_stats():
+    """
+    Fetch dashboard stats for a shop using an impersonation token.
+    Pass token as X-Impersonation-Token header.
+    """
+    token = request.headers.get('X-Impersonation-Token', '')
+    token_data = _impersonation_tokens.get(token)
+
+    if not token_data:
+        return jsonify({'error': 'Invalid or expired impersonation token'}), 401
+    if token_data['expires_at'] < datetime.utcnow():
+        del _impersonation_tokens[token]
+        return jsonify({'error': 'Impersonation token has expired'}), 401
+
+    # Temporarily override shop resolution for this request
+    shop_username = token_data['shop_username']
+    admin = Admin.query.filter_by(username=shop_username).first()
+    if not admin:
+        return jsonify({'error': 'Shop admin not found'}), 404
+
+    sid = admin.id
+    date_param = request.args.get('date')
+    today = datetime.strptime(date_param, '%Y-%m-%d').date() if date_param else datetime.today().date()
+    start_of_day = datetime.combine(today, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
+
+    shop_staff_ids = [s.id for s in Staff.query.filter_by(shop_id=sid).all()]
+    staff_logs = Ledger.query.filter(
+        Ledger.staff_id.in_(shop_staff_ids),
+        Ledger.date_time >= start_of_day,
+        Ledger.date_time < end_of_day,
+        Ledger.txn_type == 'Advance'
+    ).all() if shop_staff_ids else []
+    total_staff_pay = sum(l.amount for l in staff_logs)
+
+    expenses = DailyExpense.query.filter(
+        DailyExpense.shop_id == sid,
+        DailyExpense.date_time >= start_of_day,
+        DailyExpense.date_time < end_of_day
+    ).all()
+    total_expense = sum(e.amount for e in expenses)
+
+    incomes = DailyIncome.query.filter(
+        DailyIncome.shop_id == sid,
+        DailyIncome.date_time >= start_of_day,
+        DailyIncome.date_time < end_of_day
+    ).all()
+    total_cash = sum(i.amount for i in incomes if i.payment_mode == 'Cash')
+    total_online = sum(i.amount for i in incomes if i.payment_mode == 'Online')
+    total_income = total_cash + total_online
+
+    principles = DailyPrinciple.query.filter(
+        DailyPrinciple.shop_id == sid,
+        DailyPrinciple.date_time >= start_of_day,
+        DailyPrinciple.date_time < end_of_day
+    ).all()
+    total_principle = sum(p.amount for p in principles)
+    net_income = total_expense + total_staff_pay + total_principle - total_income
+
+    shop_settings = ShopSettings.query.filter_by(shop_id=sid).first()
+
+    return jsonify({
+        'shop_username': shop_username,
+        'shop_name': shop_settings.shop_name if shop_settings else shop_username,
+        'date': today.strftime('%Y-%m-%d'),
+        'stats': {
+            'total_income': total_income,
+            'total_cash': total_cash,
+            'total_online': total_online,
+            'total_expense': total_expense,
+            'total_staff_pay': total_staff_pay,
+            'total_principle': total_principle,
+            'net_income': net_income
+        }
+    })
 
 
 if __name__ == '__main__':

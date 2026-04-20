@@ -12,33 +12,7 @@ import MenuCard from './MenuCard';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import jsPDF from 'jspdf';
-
-const API_BASE_URL = import.meta.env.DEV ? `http://${window.location.hostname}:5000` : '';
-
-// Phone number validation helpers
-const validatePhone = (value) => {
-  // Remove any non-digit characters
-  const cleaned = value.replace(/\D/g, '');
-  // Limit to 10 digits
-  return cleaned.slice(0, 10);
-};
-
-const isValidPhone = (phone) => {
-  // Sirf 10 numbers allow karega
-  const phoneRegex = /^\d{10}$/;
-  return phoneRegex.test(phone);
-};
-
-// Multi-tenant: Har request mein X-Shop-Username header add karna
-// Isse backend ko pata chalega ki kaun sa shop data chahiye
-const getShopUsername = () => localStorage.getItem('shop_username') || 'admin';
-const shopFetch = (url, options = {}) => {
-  const headers = {
-    ...options.headers,
-    'X-Shop-Username': getShopUsername(),
-  };
-  return fetch(url, { ...options, headers });
-};
+import { API_BASE_URL, validatePhone, isValidPhone, getShopUsername, shopFetch } from './utils';
 
 // --- MAIN APP WRAPPER WITH THEME & AUTH ---
 function App() {

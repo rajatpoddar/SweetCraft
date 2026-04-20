@@ -1,6 +1,7 @@
 import os
 import re
 import secrets
+import time
 from werkzeug.utils import secure_filename
 from flask import Flask, jsonify, request, g, send_file
 from flask_sqlalchemy import SQLAlchemy
@@ -21,11 +22,21 @@ from backup_manager import BackupManager
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'default_secret')
+
+# Secret key — must be set via env var in production
+_secret_key = os.getenv('FLASK_SECRET_KEY')
+if not _secret_key or _secret_key in ('default_secret', 'my_secret_key_for_dev', 'change-this-to-a-long-random-string'):
+    if os.getenv('FLASK_ENV') == 'production':
+        raise RuntimeError("FLASK_SECRET_KEY must be set to a strong random value in production!")
+    _secret_key = 'dev-only-insecure-key'
+app.secret_key = _secret_key
+
+# File upload size limit — prevent DoS via large uploads (16 MB max)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 # CORS - restrict to frontend URL in production
 frontend_url = os.getenv('FRONTEND_URL', '*')
-CORS(app, origins=frontend_url)
+CORS(app, origins=frontend_url, supports_credentials=False)
 
 # PostgreSQL configuration with SQLite fallback
 db_uri = os.getenv('DB_URI')
@@ -40,6 +51,12 @@ if not db_uri:
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,       # Detect stale connections
+    'pool_recycle': 300,         # Recycle connections every 5 min
+    'pool_size': 10,             # Connection pool size
+    'max_overflow': 20,          # Extra connections under load
+}
 db = SQLAlchemy(app)
 
 UPLOAD_FOLDER = 'static/uploads'
@@ -54,6 +71,46 @@ backup_manager = BackupManager()
 _impersonation_tokens = {}
 
 print("✅ Backend initialized - Backup scheduler moved to sidecar cron container")
+
+# --- SIMPLE IN-MEMORY RATE LIMITER FOR LOGIN ---
+# { ip: [timestamp, ...] }
+_login_attempts = {}
+_LOGIN_MAX_ATTEMPTS = 10
+_LOGIN_WINDOW_SECONDS = 60
+
+def _check_login_rate_limit(ip):
+    """Returns True if request is allowed, False if rate limited."""
+    now = time.time()
+    window_start = now - _LOGIN_WINDOW_SECONDS
+    attempts = _login_attempts.get(ip, [])
+    # Keep only attempts within the window
+    attempts = [t for t in attempts if t > window_start]
+    if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
+        _login_attempts[ip] = attempts
+        return False
+    attempts.append(now)
+    _login_attempts[ip] = attempts
+    return True
+
+# --- AUTH HELPERS ---
+# Backup filename whitelist — only allow shop_backup_YYYYMMDD_HHMMSS.sql/.db
+_BACKUP_FILENAME_RE = re.compile(r'^shop_backup_\d{8}_\d{6}\.(sql|db)$')
+
+def _is_safe_backup_filename(filename):
+    """Validate backup filename to prevent path traversal."""
+    return bool(_BACKUP_FILENAME_RE.match(filename))
+
+def _is_authenticated_request():
+    """
+    Check if the request comes from a valid shop admin.
+    Validates that X-Shop-Username header maps to a real admin.
+    This is a lightweight check — the frontend stores the username after login.
+    """
+    username = request.headers.get('X-Shop-Username', '')
+    if not username:
+        return False
+    admin = Admin.query.filter_by(username=username).first()
+    return admin is not None
 
 # --- MULTI-TENANT HELPER ---
 def get_shop_id():
@@ -71,30 +128,30 @@ def get_shop_id():
 # --- DATABASE MODELS ---
 class Stock(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     item_name = db.Column(db.String(100), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    expiry_date = db.Column(db.Date, nullable=False)
+    expiry_date = db.Column(db.Date, nullable=False, index=True)
     min_stock = db.Column(db.Integer, default=5)
 
 class ReturnedItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     item_name = db.Column(db.String(100), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    return_date = db.Column(db.DateTime, default=datetime.now)
+    return_date = db.Column(db.DateTime, default=datetime.now, index=True)
 
 class InventoryLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     item_name = db.Column(db.String(100), nullable=False)
     action = db.Column(db.String(50), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    date_time = db.Column(db.DateTime, default=datetime.now)
+    date_time = db.Column(db.DateTime, default=datetime.now, index=True)
 
 class Staff(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
     mobile = db.Column(db.String(15), nullable=True)
     address = db.Column(db.Text, nullable=True)
@@ -105,35 +162,35 @@ class Staff(db.Model):
 
 class Attendance(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
     status = db.Column(db.String(20), nullable=False)
 
 class Ledger(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
-    date_time = db.Column(db.DateTime, default=datetime.now)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False, index=True)
+    date_time = db.Column(db.DateTime, default=datetime.now, index=True)
     txn_type = db.Column(db.String(50), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     description = db.Column(db.String(255))
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     customer_name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(15), nullable=False)
     address = db.Column(db.Text, nullable=True)
     items_details = db.Column(db.Text, nullable=False)
-    delivery_date = db.Column(db.Date, nullable=False)
+    delivery_date = db.Column(db.Date, nullable=False, index=True)
     total_amount = db.Column(db.Float, nullable=False)
     advance_paid = db.Column(db.Float, default=0.0)
     discount = db.Column(db.Float, default=0.0)
-    status = db.Column(db.String(50), default='Pending')
+    status = db.Column(db.String(50), default='Pending', index=True)
     is_due_cleared = db.Column(db.Boolean, default=False)
 
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(15), nullable=True)
     address = db.Column(db.Text, nullable=True)
@@ -141,26 +198,26 @@ class Customer(db.Model):
 
 class DailyExpense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     item_name = db.Column(db.String(100), nullable=False)
     quantity = db.Column(db.Float, default=1.0)
     unit = db.Column(db.String(20), default='kg')
     amount = db.Column(db.Float, nullable=False)
-    date_time = db.Column(db.DateTime, default=datetime.now)
-    mahajan_id = db.Column(db.Integer, db.ForeignKey('mahajan.id'), nullable=True)
+    date_time = db.Column(db.DateTime, default=datetime.now, index=True)
+    mahajan_id = db.Column(db.Integer, db.ForeignKey('mahajan.id'), nullable=True, index=True)
     payment_status = db.Column(db.String(20), default='Paid')
 
 class CustomerLedger(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
-    date_time = db.Column(db.DateTime, default=datetime.now)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False, index=True)
+    date_time = db.Column(db.DateTime, default=datetime.now, index=True)
     txn_type = db.Column(db.String(50), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     items_details = db.Column(db.Text, nullable=True)
 
 class MenuItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
     desc = db.Column(db.String(255))
     category = db.Column(db.String(50), nullable=False)
@@ -207,24 +264,24 @@ class SuperAdmin(db.Model):
 
 class Mahajan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(15))
     balance = db.Column(db.Float, default=0.0)
 
 class MahajanLedger(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    mahajan_id = db.Column(db.Integer, db.ForeignKey('mahajan.id'), nullable=False)
-    date_time = db.Column(db.DateTime, default=datetime.now)
+    mahajan_id = db.Column(db.Integer, db.ForeignKey('mahajan.id'), nullable=False, index=True)
+    date_time = db.Column(db.DateTime, default=datetime.now, index=True)
     txn_type = db.Column(db.String(50), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     description = db.Column(db.String(255))
 
 class MahajanBill(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    mahajan_id = db.Column(db.Integer, db.ForeignKey('mahajan.id'), nullable=False)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
-    date = db.Column(db.Date, nullable=False)
+    mahajan_id = db.Column(db.Integer, db.ForeignKey('mahajan.id'), nullable=False, index=True)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
     amount = db.Column(db.Float, nullable=False)
     description = db.Column(db.String(255))
     bill_image = db.Column(db.String(255))  # filename of uploaded bill
@@ -232,18 +289,18 @@ class MahajanBill(db.Model):
 
 class DailyIncome(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     payment_mode = db.Column(db.String(20), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     description = db.Column(db.String(255))
-    date_time = db.Column(db.DateTime, default=datetime.now)
+    date_time = db.Column(db.DateTime, default=datetime.now, index=True)
 
 class DailyPrinciple(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    shop_id = db.Column(db.Integer, default=1, nullable=False)
+    shop_id = db.Column(db.Integer, default=1, nullable=False, index=True)
     amount = db.Column(db.Float, nullable=False)
     description = db.Column(db.String(255))
-    date_time = db.Column(db.DateTime, default=datetime.now)
+    date_time = db.Column(db.DateTime, default=datetime.now, index=True)
 
 with app.app_context():
     db.create_all()
@@ -278,7 +335,15 @@ with app.app_context():
 # --- SECURE LOGIN ---
 @app.route('/api/login', methods=['POST'])
 def login():
+    # Rate limiting — prevent brute force
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+    if not _check_login_rate_limit(client_ip):
+        return jsonify({"error": "Too many login attempts. Please wait a minute."}), 429
+
     data = request.json
+    if not data or not data.get('username') or not data.get('password'):
+        return jsonify({"error": "Username and password required"}), 400
+
     admin = Admin.query.filter_by(username=data.get('username')).first()
     if admin and check_password_hash(admin.password_hash, data.get('password')):
         shop = ShopOwner.query.filter_by(admin_username=admin.username).first()
@@ -294,7 +359,9 @@ def login():
                 city=shop.city if shop else ''
             ))
             db.session.commit()
-        return jsonify({"message": "Login successful", "token": "sweetcraft_secure_token", "username": admin.username}), 200
+        # Generate a secure session token
+        session_token = secrets.token_urlsafe(32)
+        return jsonify({"message": "Login successful", "token": session_token, "username": admin.username}), 200
     return jsonify({"error": "Invalid credentials"}), 401
 
 
@@ -1422,9 +1489,6 @@ def get_mahajan_bills(id):
     
     return jsonify(all_transactions)
 
-    db.session.commit()
-    return jsonify({"message": f"Vendor {mahajan.name} deleted successfully!"})
-
 
 # ============================================================
 #  SHOP SETTINGS
@@ -1515,6 +1579,8 @@ def import_database():
 @app.route('/api/backups/list', methods=['GET'])
 def list_backups():
     """List all available backups"""
+    if not _is_authenticated_request():
+        return jsonify({'error': 'Unauthorized'}), 401
     try:
         backups = backup_manager.list_backups()
         stats = backup_manager.get_backup_stats()
@@ -1535,12 +1601,11 @@ def create_manual_backup():
     """
     # Allow cron sidecar to trigger backup without shop auth
     cron_secret = request.headers.get('X-Cron-Secret', '')
-    expected_secret = os.getenv('CRON_SECRET', 'sweetcraft_cron_2am')
-    is_cron = cron_secret == expected_secret
+    expected_secret = os.getenv('CRON_SECRET', '')
+    is_cron = expected_secret and cron_secret == expected_secret
 
-    if not is_cron:
-        # For manual calls, just proceed (existing behavior — shop admin is authenticated via frontend)
-        pass
+    if not is_cron and not _is_authenticated_request():
+        return jsonify({'error': 'Unauthorized'}), 401
 
     try:
         backup_path = backup_manager.create_backup()
@@ -1558,10 +1623,20 @@ def create_manual_backup():
 @app.route('/api/backups/download/<filename>', methods=['GET'])
 def download_backup(filename):
     """Download a specific backup file"""
+    if not _is_authenticated_request():
+        return jsonify({'error': 'Unauthorized'}), 401
     try:
+        # Strict filename validation — prevent path traversal
+        if not _is_safe_backup_filename(filename):
+            return jsonify({'error': 'Invalid filename'}), 400
         backup_path = os.path.join(backup_manager.backup_dir, filename)
-        if os.path.exists(backup_path) and filename.startswith('shop_backup_'):
-            return send_file(backup_path, as_attachment=True, download_name=filename)
+        # Resolve real path and ensure it stays within backup_dir
+        real_backup_dir = os.path.realpath(backup_manager.backup_dir)
+        real_backup_path = os.path.realpath(backup_path)
+        if not real_backup_path.startswith(real_backup_dir + os.sep):
+            return jsonify({'error': 'Invalid filename'}), 400
+        if os.path.exists(real_backup_path):
+            return send_file(real_backup_path, as_attachment=True, download_name=filename)
         else:
             return jsonify({'error': 'Backup file not found'}), 404
     except Exception as e:
@@ -1570,6 +1645,10 @@ def download_backup(filename):
 @app.route('/api/backups/restore/<filename>', methods=['POST'])
 def restore_backup(filename):
     """Restore database from a backup"""
+    if not _is_authenticated_request():
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not _is_safe_backup_filename(filename):
+        return jsonify({'error': 'Invalid filename'}), 400
     try:
         success = backup_manager.restore_backup(filename)
         if success:
@@ -1582,9 +1661,16 @@ def restore_backup(filename):
 @app.route('/api/backups/delete/<filename>', methods=['DELETE'])
 def delete_backup(filename):
     """Delete a specific backup file"""
+    if not _is_authenticated_request():
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not _is_safe_backup_filename(filename):
+        return jsonify({'error': 'Invalid filename'}), 400
     try:
-        backup_path = os.path.join(backup_manager.backup_dir, filename)
-        if os.path.exists(backup_path) and filename.startswith('shop_backup_'):
+        real_backup_dir = os.path.realpath(backup_manager.backup_dir)
+        backup_path = os.path.realpath(os.path.join(backup_manager.backup_dir, filename))
+        if not backup_path.startswith(real_backup_dir + os.sep):
+            return jsonify({'error': 'Invalid filename'}), 400
+        if os.path.exists(backup_path):
             os.remove(backup_path)
             return jsonify({'message': 'Backup deleted successfully'}), 200
         else:
@@ -1595,6 +1681,8 @@ def delete_backup(filename):
 @app.route('/api/backups/stats', methods=['GET'])
 def backup_stats():
     """Get backup statistics"""
+    if not _is_authenticated_request():
+        return jsonify({'error': 'Unauthorized'}), 401
     try:
         stats = backup_manager.get_backup_stats()
         return jsonify(stats), 200
@@ -1642,7 +1730,14 @@ def reset_today_entry():
 
 @app.route('/api/superadmin/login', methods=['POST'])
 def superadmin_login():
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+    if not _check_login_rate_limit(client_ip):
+        return jsonify({'error': 'Too many login attempts. Please wait a minute.'}), 429
+
     data = request.json
+    if not data or not data.get('username') or not data.get('password'):
+        return jsonify({'error': 'Username and password required'}), 400
+
     sa = SuperAdmin.query.filter_by(username=data.get('username')).first()
     if sa and check_password_hash(sa.password_hash, data.get('password')):
         return jsonify({'message': 'Super Admin access granted'}), 200
@@ -1852,6 +1947,20 @@ def superadmin_impersonate_stats():
             'net_income': net_income
         }
     })
+
+
+# ============================================================
+#  HEALTH CHECK
+# ============================================================
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Docker/load balancer health check endpoint."""
+    try:
+        db.session.execute(db.text('SELECT 1'))
+        return jsonify({'status': 'ok', 'db': 'connected'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'db': str(e)}), 503
 
 
 if __name__ == '__main__':
